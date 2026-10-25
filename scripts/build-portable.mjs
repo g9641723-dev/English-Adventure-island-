@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 const output = await build({
   entryPoints: ["src/main.js"],
   bundle: true,
+  define: { "import.meta.env.VITE_CLOUD_MODE": '"false"' },
   format: "iife",
   outfile: "game.js",
   write: false,

@@ -1,25 +1,36 @@
-# 未來成績串接契約
+# Cloudflare 成績系統
 
-目前沒有設定遠端端點，遊戲僅本機儲存與匯出 JSON。程式不會自動發送資料。
+正式版只使用 Cloudflare Pages、Workers、D1 及 Access。不使用 Google Apps Script、Google 試算表或其他成績儲存服務。
 
-## 請求與確認
+## 架構與權限
 
-`makeSubmission(bank, nickname, profile, submissionId)` 產出：
+- Pages 提供遊戲 `/` 和老師介面 `/teacher.html`。
+- Pages Functions 僅轉送 `/api/*`，透過私有 Service Binding 呼叫 `english-island-api` Worker；Worker 關閉 `workers.dev` 與公開版本預覽。
+- 老師透過 Cloudflare Access Email One-time PIN 登入。Access 保護 `/teacher.html` 與 `/api/admin/*`；Worker 再驗證 JWT 簽章、issuer、audience、有效期及老師 Email 允許名單。前端隱藏按鈕不是權限保護。
+- 學生使用班級、座號及老師個別發放的 128-bit 隨機入場碼。D1 只儲存碼的 SHA-256，Session Token 也只儲存雜湊；瀏覽器使用 HttpOnly、SameSite=Strict Cookie，正式 HTTPS 使用 Secure。
+- 學生 API 只依 session 對應自身學生 ID，不接受可指定其他學生的成績查詢或更新。老師排行榜不對學生公開。
+- 所有修改 API 檢查 Origin，使用 SQL 綁定參數及輸入驗證。登入採每 IP 及每學生的限流，不把原始 IP 保存到 D1。
 
-```json
-{"schemaVersion":1,"submissionId":"固定的唯一識別碼","nickname":"Mia","quizId":"題庫識別字串","score":80,"maxScore":90,"completedAt":"ISO-8601 時間","answers":{"v1":true,"v2":false}}
-```
+## 成績定義
 
-`submitResult(httpsEndpoint, payload)` 透過可讀取回應的 HTTPS POST 傳送，10 秒逾時。後端必須回覆 `{"ok":true,"submissionId":"與請求相同"}`。不使用 `no-cors`，不將 opaque 回應或 HTTP 200 但內容不符視為同步成功。
+- 每班綁定不可變題庫版本；老師發布新題庫不會覆寫既有班級或成績。
+- 完成每關時，前端送出首次選擇的選項索引或配對嘗試紀錄。Worker 依伺服器題庫重新計分，不信任瀏覽器傳入的 score、studentId 或完成時間。
+- 同一學生／題庫只有一個作業紀錄；同一關只保存第一次有效提交。重送、重試及重新登入不會重複加分或改寫第一次成績。
+- 答對題數：選擇題首次答對數＋成功配對數。作答次數：選擇題題數＋全部配對嘗試次數；正確率＝答對數／作答次數。配對可重試至全部成功並領取水晶，因此水晶比例與正確率可能不同。
+- 完成時間由伺服器記錄；所有可用關卡完成才標記整份作業完成。經過秒數包含離線、暫停與網路等待，不是純作答時間。
+- 平均分數以已開始學生為分母，含尚未完成者；未開始者列在名冊但不納入平均。完成率＝已完成整份作業人數／全班名冊人數。
+- 排行先依得分比例，再依水晶分數；同分時完成者及耗時較短者優先。
 
-## Apps Script 建議設定流程（尚未實作）
+## 斷線與共用裝置
 
-1. 教師建立專用試算表，僅授予必要的管理人員權限。欄位建議為 submissionId、nickname、quizId、score、maxScore、completedAt、receivedAt。
-2. 建立 Apps Script 的 `doPost`，檢查 schemaVersion、欄位大小、題庫識別、分數範圍與型別。不要信任前端總分；正式評量應由後端依可信題庫重新計算。
-3. 用 submissionId 去重，並以 LockService 保護併發寫入。試算表文字應防止公式注入。只保存必要欄位，訂定保存期限與刪除方式。
-4. 部署成 Web App，審慎設定執行身分與存取權限。機密存於 Apps Script Properties 或 Cloudflare Functions 的伺服器設定，不放在前端或聊天中。
-5. 實測 Apps Script `/exec` 端點的重新導向、JSON POST 預檢與 CORS。若無法從瀏覽器讀取確認，新增固定目的地的 Pages Function 代理；不可建立任意 URL 代理。前端呼叫受控代理，由代理檢查並轉送合法請求。
-6. 在下一版建立持久待同步佇列；同一筆紀錄重試需使用相同 submissionId。有限重試，顯示待同步／失敗／已確認，只有匹配確認才移除紀錄。
-7. 以測試資料驗證成功、拒絕、斷線、逾時、重複與併發提交，再確認試算表實際內容。沒有真實端點前，只能宣稱 mock 契約測試通過。
+每關完成自動送出，只有伺服器確認後顯示已保存。失敗會明確顯示尚未儲存，保留本分頁 sessionStorage 待送資料，支援重新整理、手動重試與網路恢復後重試。重新登入同一作業可恢復暫存；關閉分頁、清除網站資料或儲存遭限制可能遺失未同步內容，請確認已保存再離開。
 
-共享排行榜也需要後端查詢及班級資料隔離；此裝置排行榜不能當作共享排行榜。未來版本須先定義班級識別、權限及學生資料保存規則。
+正式雲端模式不使用舊本機排行榜或多學生 localStorage 紀錄；學生應在共用裝置操作結束後登出。入場碼遺失可由老師重設，舊碼與先前 session 立即失效，既有成績保留。
+
+這是課堂練習系統。答案必須提供給裝置才能即時解析，不能宣稱具正式考試防作弊保證；入場碼被轉交也可能被冒用。老師需個別發碼、妥善保管 CSV，遵循學校資料保存規則。
+
+## 資料結構
+
+`worker/migrations/0001_schema.sql` 建立題庫、班級、學生名冊、作業、各關成績、session 與限流資料表。`0002_demo.sql` 插入原有示範題。所有資源只在使用者授權後建立於其 Cloudflare 帳戶。
+
+每日排程清理過期 session 與限流資料，不自動刪除學生成績。長期使用須定期匯出與依校方規定刪除不再需要的班級資料；不要把個別入場碼上傳至 Git。

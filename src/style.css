@@ -1220,5 +1220,38 @@ summary {
   }
 }
 /* Keep inactive notifications hidden in full-page captures and assistive UI. */
-#toast { opacity: 0; visibility: hidden; }
-#toast.show { opacity: 1; visibility: visible; }
+#toast {
+  opacity: 0;
+  visibility: hidden;
+}
+#toast.show {
+  opacity: 1;
+  visibility: visible;
+}
+.cloud-status {
+  max-width: 1168px;
+  margin: 16px auto 0;
+  padding: 12px 18px;
+  border: 1px solid #dae2cd;
+  border-radius: 9px;
+  background: #edf2e3;
+  font-size: 12px;
+  color: #4b7154;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cloud-status .quiet {
+  flex-shrink: 0;
+}
+#login-status {
+  color: #9b563e;
+  white-space: pre-wrap;
+}
+@media (max-width: 720px) {
+  .cloud-status {
+    margin: 12px 16px;
+    font-size: 11px;
+  }
+}

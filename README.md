@@ -1,73 +1,50 @@
 # English Adventure Island · 英語冒險島
 
-面向國中生的奇幻島嶼英語遊戲第一版。使用原創 SVG 島嶼、卡通狐狸 Lumi、Web Audio 音樂與音效，不需帳號或付費素材。首次載入即有原創示範題，不需要後端。
+國中生奇幻島嶼英文遊戲：保留原創浮空島、狐狸 Lumi、動畫與聲音，以及單字、配對、文法、閱讀、聽力五區玩法。
 
-## Windows 直接試玩（推薦）
+目前新增 Cloudflare 全套成績架構：**Pages 遊戲＋Workers API＋D1 成績＋Access 老師登入**。不使用 Google Apps Script 或 Google 試算表。程式與本機驗證已完成；公開部署仍需使用者帳戶授權，沒有上線前不提供猜測網址。
 
-解壓縮專案 ZIP 後，直接用 Edge／Chrome 開啟根目錄 `English-Adventure-Island.html`，或雙擊 `START-GAME.bat`。**不用安裝 Node.js、不用 Token，也不會公開部署。** 詳見 [Windows 操作說明](docs/WINDOWS.md)。要修改原始碼時才使用下面的開發流程。修改後以 `npm run build:portable` 重建單檔版。
+## 學生與老師
 
-## 啟動與建置
+- 學生開始前輸入班級、座號及老師發的個別入場碼，不需真實姓名。
+- 每關完成自動送出首次作答，後端計分、保存正確率與伺服器時間。斷線清楚顯示待同步，支援重試，重送不重複加分。
+- 老師以 `g9641723@dsjh.ptc.edu.tw` 的 Access Email 驗證碼登入，可建班／發碼、發布題庫、查看班級成績／排行榜／平均分數／完成率及匯出 CSV。
+- 學生只能讀寫自己的紀錄；老師 API 驗證 JWT，不依賴前端隱藏功能。
 
-需要 Node.js 22.12 以上（本次驗證版本 24.19.0）。
+詳細操作與部署見 [Cloudflare 設定指南](docs/CLOUDFLARE.md)，資料及權限定義見 [成績系統設計](docs/INTEGRATION.md)。
+
+## 開發與測試
+
+需要 Node.js 24 LTS 與 npm。
 
 ```bash
-npm ci --cache /tmp/english-island-npm
+npm ci
 npm run dev
-```
-
-終端機會顯示開發伺服器位置。在自己的開發電腦可透過該位置操作；雲端環境是否提供網頁存取，依所用平台而定。
-
-```bash
 npm test
-npm run build
-npm run preview
+npm run test:worker
+node --test tests/deploy.test.js
+npm run build:cloud
+npm run test:cloud
 ```
 
-瀏覽器測試：有系統 Chromium 時使用 `CHROMIUM_PATH=/usr/bin/chromium npm run test:e2e`；其他環境先執行 `npx playwright install chromium`，再執行 `npm run test:e2e`。下載需要允許 `cdn.playwright.dev` 及其重新導向目的地；本環境使用已安裝的 Chromium，沒有關閉驗證。
+瀏覽器測試需先 `npx playwright install chromium`；已有系統 Chromium 的雲端環境使用 `CHROMIUM_PATH=/usr/bin/chromium npm run test:cloud`。`npm run build:cloud` 啟用正式成績模式並產生學生與老師兩個頁面；`npm run build` 是本機練習模式。Access 及後端失效時，正式模式不會偷偷改成本機模式並宣稱已儲存。
 
-## 學生操作
+授權後使用 `npm run deploy:cloud -- --free-plan-confirmed`；部署工具不啟用付費方案，不寫入 Token 至檔案。設定草稿保存不代表已授權、已套用或已上線。
 
-1. 右上角點暱稱，輸入 1–16 字暱稱。請勿輸入真實姓名等個人資料；共用裝置可換暱稱，各自保存進度。
-2. 點「開始我的冒險」，或選擇地圖上已解鎖的地標，再點「進入這座島嶼」。狐狸會跟著地標移動。
-3. 依序完成晨光森林（單字）、星語溪谷（配對）、月影遺跡（文法）、天空樹屋（閱讀）、水晶之巔（聽力）。缺少題目的關卡會跳過。
-4. 四選一每題首次答對獲得題目設定的水晶；答錯顯示繁體中文解析，可重試但不補分。所有題目作答後即可完成該關，不要求全部答對。配對可反覆嘗試，全部完成首次領取每組 10 水晶。
-5. 聲音預設關閉，點「聲音關閉」開啟背景音樂及答題音效。聽力題有獨立播放按鈕；靜音背景不會禁止主動播放聽力題。播放聽力時背景音樂暫停。
-6. 聽力示範使用裝置英文語音；若無英文語音，會提示查看逐字稿。教師可改用音檔。練習模式允許查看逐字稿，不是封閉測驗模式。
-7. 關閉題目視窗可回到地圖，已作答內容會保存。點排行榜查看此裝置紀錄；同分依較早更新時間排序。暱稱視窗可確認後重設自己的進度。
-8. 完成關卡或開啟排行榜可匯出成績 JSON。進度存於此瀏覽器，不會跨裝置同步，清除網站資料會遺失；無法儲存時以提示告知並改為暫存。
+## 題庫與計分
 
-## 教師匯入題庫
+JSON／CSV 範本位於 `public/templates/`。題庫最多 200 題、1 MB，需四個非空、不重複選項與繁體中文解析；`answerIndex` 從 0 起算。閱讀需 `passage`，聽力需 `speech` 或合法 HTTPS／同站 `audioUrl`。配對來自單字題的 `word`、`meaning`，至少兩組、上限四組。
 
-從「題庫工坊」下載 JSON／CSV 範本，編輯後上傳，確認預覽才套用。匯入錯誤會保留原題庫。套用新題庫或還原示範題均需確認，且清除這台裝置所有暱稱的舊進度。
+正式雲端題庫只能由老師發布，班級各自綁定不可變版本，學生不能以自訂題庫改寫官方成績。選擇題首次答對才加分；配對全部完成首次領取獎勵。正確率與完成率定義見設計文件。系統是練習用途，不保證正式考試防作弊。
 
-- 最多 200 題、1 MB；JSON 頂層為 `{"version":1,"questions":[...]}`。
-- `id`：不重複字串；`type`：`vocabulary`、`grammar`、`reading`、`listening`。
-- `prompt`：題目（最多 3000 字）；`choices`：四個不重複非空選項；`answerIndex`：從 0 起算，介於 0–3；`explanation`：必填繁中解析（最多 5000 字）；`points`：0–100。
-- CSV 使用 UTF-8，允許 BOM、引號、逗號、換行與雙引號跳脫。選項為 `choiceA` 到 `choiceD`。其餘欄位見範本。
-- 閱讀題另填 `passage`。聽力題填 `speech`（英文語音合成）或 `audioUrl`（HTTPS／以單一 `/` 開頭的同站音檔路徑），優先播放音檔。音檔必須在實際裝置可載入；載入失敗會顯示提示。
-- 配對活動從單字題的選配欄位 `word`、`meaning` 取得，至少兩組、不重複，上限四組；重複單字或中文義只保留第一組。示範題有三組。
-- 所有匯入文字以純文字呈現，不執行 HTML。上傳後先查看題目預覽與可配對數量。全題庫沒有任何配對資料時，配對關會略過。
+## Windows 本機版仍保留
 
-JSON 範本：[public/templates/questions.json](public/templates/questions.json)。CSV 範本：[public/templates/questions.csv](public/templates/questions.csv)。
+`English-Adventure-Island.html` 可直接由 Edge／Chrome 開啟；`START-GAME.bat` 也能啟動。此版完全是本機練習，不回傳成績。修改原始碼後用 `npm run build:portable` 更新，詳見 [Windows 說明](docs/WINDOWS.md)。
 
-## Google Apps Script 預留介面
+先前 `exports/` 的 ZIP 是舊本機版快照，不代表這次已部署的雲端系統。新版本應從目前分支的完整原始碼與文件審查，正式網址必須待真實部署成功後才產生。
 
-第一版只做本機練習與匯出，不自動傳送學生資料。`src/core.js` 提供 `makeSubmission` 與 `submitResult`，後者以 mock 驗證成功、拒絕、逾時及無法確認的回應；尚未接上真實 Apps Script。
+## 文件
 
-未來後端契約與設定步驟見 [docs/INTEGRATION.md](docs/INTEGRATION.md)。前端成績可被修改，不能當成具防作弊保證的正式測驗紀錄。
-
-## Cloudflare Pages（未來選配，目前不使用）
-
-1. 將這份程式提交到自己的 GitHub 分支並審查後，在 Cloudflare Pages 建立專案，連接該儲存庫。
-2. 使用 Node.js 24，建置命令 `npm run build`，輸出目錄 `dist`，專案根目錄為儲存庫根目錄。
-3. 或本機建置後，直接上傳 `dist`。此版為單頁靜態前端，不需要密鑰、資料庫或 Functions，無深層路由。
-4. 部署後測試首頁、全部關卡、JSON／CSV 下載與匯入、重新整理保存、音訊及行動裝置。不要把本機成功當成部署驗證。
-5. 更新使用新提交觸發建置；回復使用 Cloudflare 部署紀錄中先前成功版本。題庫保存在瀏覽器，改程式不會自動覆蓋學生已匯入的題庫；可在工坊還原示範題。
-
-目前未部署到 Cloudflare，未建立公開網址。
-
-## 測試、授權與第一版範圍
-
-詳見 [docs/TESTING.md](docs/TESTING.md)、[docs/ASSETS.md](docs/ASSETS.md)。第一版沒有自由行走碰撞、教師登入、正式測驗模式、共享排行榜、跨裝置帳號或真實成績回傳。探索採地圖點選，角色會移動到地標；重點是可操作的完整練習循環。
-
-實際畫面檢查與公開預覽部署步驟見 [docs/PREVIEW.md](docs/PREVIEW.md)。
+- [測試流程與結果](docs/TESTING.md)
+- [遊戲規劃](docs/PLAN.md)
+- [素材來源](docs/ASSETS.md)：場景、角色、動畫及合成音樂為本專案原創；沒有外部素材下載依賴。

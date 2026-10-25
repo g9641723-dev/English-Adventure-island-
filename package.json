@@ -7,14 +7,28 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test tests/core.test.js",
+    "test": "node --test tests/core.test.js tests/worker.test.js tests/deploy.test.js",
     "test:e2e": "playwright test",
     "inspect:game": "node tests/inspect-game.mjs",
-    "build:portable": "node scripts/build-portable.mjs"
+    "build:portable": "node scripts/build-portable.mjs",
+    "build:cloud": "vite build --mode cloud",
+    "worker:dev": "wrangler dev --config worker/wrangler.jsonc --local",
+    "test:worker": "node --test tests/worker.test.js",
+    "deploy:worker": "wrangler deploy --config worker/wrangler.jsonc",
+    "deploy:pages": "npm run build:cloud && wrangler pages deploy dist --branch main",
+    "db:migrate:local": "wrangler d1 migrations apply english-island-results --config worker/wrangler.jsonc --local",
+    "db:migrate:remote": "wrangler d1 migrations apply english-island-results --config worker/wrangler.jsonc --remote",
+    "test:cloud": "playwright test --config playwright.cloud.config.js",
+    "deploy:cloud": "node scripts/deploy-cloudflare.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
     "esbuild": "0.28.2",
-    "vite": "^7.1.0"
+    "miniflare": "4.20260730.0",
+    "vite": "^7.1.0",
+    "wrangler": "4.152.0"
+  },
+  "dependencies": {
+    "jose": "6.2.13"
   }
 }

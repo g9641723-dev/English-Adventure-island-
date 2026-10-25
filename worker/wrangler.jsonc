@@ -1,0 +1,24 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "english-island-api",
+  "main": "index.js",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "triggers": { "crons": ["17 19 * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "english-island-results",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "APP_ORIGINS": "https://REPLACE.pages.dev",
+    "ACCESS_TEAM_DOMAIN": "REPLACE.cloudflareaccess.com",
+    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
+    "TEACHER_EMAILS": "g9641723@dsjh.ptc.edu.tw",
+  },
+}

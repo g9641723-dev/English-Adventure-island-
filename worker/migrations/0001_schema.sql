@@ -1,0 +1,12 @@
+PRAGMA foreign_keys=ON;
+CREATE TABLE banks (id TEXT PRIMARY KEY, title TEXT NOT NULL, data_json TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE classes (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, bank_id TEXT NOT NULL REFERENCES banks(id), created_at INTEGER NOT NULL);
+CREATE TABLE students (id TEXT PRIMARY KEY, class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE, seat INTEGER NOT NULL CHECK(seat BETWEEN 1 AND 100), entry_hash TEXT NOT NULL, UNIQUE(class_id,seat));
+CREATE TABLE runs (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, bank_id TEXT NOT NULL REFERENCES banks(id), started_at INTEGER NOT NULL, completed_at INTEGER, UNIQUE(student_id,bank_id));
+CREATE TABLE stage_results (run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, stage TEXT NOT NULL, score REAL NOT NULL, max_score REAL NOT NULL, correct_count INTEGER NOT NULL, question_count INTEGER NOT NULL, completed_at INTEGER NOT NULL, answers_json TEXT NOT NULL, PRIMARY KEY(run_id,stage));
+CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
+CREATE TABLE rate_limits (key TEXT PRIMARY KEY, hits INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE INDEX sessions_expiry ON sessions(expires_at);
+CREATE INDEX limits_expiry ON rate_limits(expires_at);
+CREATE INDEX students_class ON students(class_id);
+CREATE INDEX runs_student ON runs(student_id,bank_id);

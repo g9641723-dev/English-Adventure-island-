@@ -1,0 +1,126 @@
+.teacher-shell {
+  max-width: 1180px;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+.teacher-shell h1 {
+  font-size: 30px;
+}
+.teacher-shell p {
+  line-height: 1.9;
+  color: #617b6b;
+}
+.teacher-card {
+  background: #fffdf5;
+  border: 1px solid #e0e5d5;
+  border-radius: 16px;
+  padding: 26px;
+  margin: 24px 0;
+}
+.teacher-card h2 {
+  font-size: 22px;
+}
+.toolbar {
+  display: flex;
+  align-items: end;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+.teacher-card form {
+  display: flex;
+  align-items: end;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+.teacher-card form label {
+  flex: 1;
+  min-width: 140px;
+}
+.teacher-card form input {
+  margin-bottom: 0;
+}
+.teacher-card select {
+  display: block;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: 1px solid #cdd9c4;
+  border-radius: 8px;
+  background: #fff;
+  color: #24464a;
+  font: inherit;
+}
+.teacher-card .primary {
+  min-height: 48px;
+  text-decoration: none;
+}
+.class-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 22px;
+  background: #edf2e3;
+  border-radius: 10px;
+  padding: 12px 20px;
+  margin: 18px 0;
+}
+.class-summary b {
+  font-size: 20px;
+}
+.class-summary small {
+  width: 100%;
+  color: #71846b;
+}
+.table-wrap {
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+th,
+td {
+  text-align: left;
+  padding: 14px 12px;
+  border-bottom: 1px solid #e4e8d9;
+}
+th {
+  color: #67825c;
+}
+#admin-status {
+  white-space: pre-wrap;
+  color: #866b39;
+}
+#roster-output {
+  overflow-wrap: anywhere;
+}
+#new-code {
+  word-break: break-all;
+}
+@media (max-width: 600px) {
+  .teacher-shell {
+    margin: 24px auto;
+    padding: 0 14px;
+  }
+  .teacher-card {
+    padding: 18px;
+  }
+  .teacher-shell h1 {
+    font-size: 25px;
+  }
+  .teacher-card form {
+    display: block;
+  }
+  .teacher-card form button {
+    margin-top: 15px;
+  }
+  .class-summary {
+    gap: 15px;
+  }
+  .teacher-card .leaderboard li span {
+    width: 60%;
+  }
+}

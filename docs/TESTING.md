@@ -1,6 +1,6 @@
 # 測試流程與實際結果
 
-## 本次驗證
+## 初版本機遊戲驗證（歷史紀錄）
 
 - Node.js 24.19.0、Vite 7.3.7、系統 Chromium、Playwright。
 - `npm test`：7 項通過，0 失敗、0 跳過。涵蓋題庫驗證、CSV 特殊字元、錯誤資料、大小限制、首次計分、儲存損毀及成績回傳 mock 契約。
@@ -32,3 +32,17 @@
 `npm run build:portable` 產生完整內嵌程式、場景、聲音與題庫範本的 `English-Adventure-Island.html`。`CHROMIUM_PATH=/usr/bin/chromium node scripts/test-portable.mjs` 在桌面、平板、手機三種尺寸全部通過五區闖關、90 分計分、保存、範本下載與 CSV 套用。測試不使用 Vite、不載入原始模組或外部資源；以 localhost 提供同一份 HTML。本環境政策阻擋 file://，Windows 實機雙擊開啟尚未驗證。
 
 `scripts/package-windows.py` 將完整原始碼、單檔、Windows 啟動批次檔、說明與 dist 打包，驗證 ZIP CRC、項目唯一性及 HTML 位元組一致；排除 Git 歷史、開發依賴與憑證檔。
+
+
+## 目前 Cloudflare 課堂版驗證
+
+- `npm ci --cache /tmp/english-island-npm --no-audit --no-fund`：以 lockfile 安裝成功。
+- `npm test`：20 項通過、0 失敗、0 跳過。涵蓋原題庫／計分、真實 workerd＋本機 D1、JWT 簽章與 audience／expiry／Email 允許名單、學生隔離、限流、CSRF、去重、配對統計、CSV 公式防護，以及部署工具的 mock API／Free 確認／順序與失敗處理。
+- `npm run build:cloud`：成功產生學生頁與老師頁；`wrangler pages functions build` 成功；`wrangler deploy --dry-run --config worker/wrangler.jsonc` 成功（雲端環境以可寫入的 XDG_CONFIG_HOME 啟動）。dry-run 沒有建立遠端服務。
+- `CHROMIUM_PATH=/usr/bin/chromium npm run test:cloud`：6 項通過、0 失敗、0 跳過。桌面、平板、手機各驗證完整師生流程與學生禁止查閱老師資料。
+- 完整流程包含老師建班／下載個別入場碼、學生登入、五區作答、後端 90 分、第一次提交短暫失敗的待同步提示及手動重試、重載後官方進度、老師平均分數／50% 完成率／CSV，以及學生登出失效。
+- `npm run build` 後既有 `npm run test:e2e`：9 項通過，原有畫面、解析、配對、匯入及跨尺寸操作保留。
+- 重建 Windows 單檔版後，`scripts/test-portable.mjs` 三種尺寸全部通過，最後已恢復 `dist` 為 cloud mode 產物。
+- 老師頁截圖位於忽略 Git 的 `artifacts/teacher-desktop.png`、`teacher-tablet.png`、`teacher-mobile.png`；使用虛構測試班級，不包含真實學生資料。
+
+Cloudflare Access 的 JWT 使用本機測試專用產生的簽章及公鑰驗證；測試 fixture 不會部署。尚未驗證老師真實 Email OTP、遠端 D1、Access 邊緣政策、公開網址或 Cloudflare 實際免費用量。這些需要使用者授權並確認 Free 方案後執行。沒有 Windows／iOS 實機測試，也不宣稱正式考試防作弊。

@@ -7,3 +7,9 @@ artifacts/
 .wrangler/
 English-Adventure-Island.html
 exports/
+
+.dev.vars
+.dev.vars.*
+.env.local
+.env.*.local
+.cloudflare/

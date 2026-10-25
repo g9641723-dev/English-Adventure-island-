@@ -1,3 +1,4 @@
+import { api, post, cloudAvailable } from "./cloud.js";
 import "./style.css";
 import {
   DEMO,
@@ -32,7 +33,8 @@ try {
     },
   };
 }
-const saved = loadState(storage);
+const saved =
+  import.meta.env.VITE_CLOUD_MODE === "true" ? null : loadState(storage);
 let state = saved ?? {
   version: 1,
   nickname: "冒險家",
@@ -40,6 +42,12 @@ let state = saved ?? {
   bank: structuredClone(DEMO),
   sound: false,
 };
+let cloudMode = import.meta.env.VITE_CLOUD_MODE === "true",
+  cloudUser = null,
+  cloudPicks = {},
+  cloudPairs = [],
+  cloudQueue = {},
+  cloudSyncing = false;
 let selected = 0,
   stage = null,
   question = null,
@@ -62,6 +70,10 @@ function notify(message) {
   setTimeout(() => $("#toast").classList.remove("show"), 4500);
 }
 function save() {
+  if (cloudMode) {
+    persistCloud();
+    return;
+  }
   profile().updatedAt = Date.now();
   try {
     storage.setItem("eai-v1", JSON.stringify(state));
@@ -81,9 +93,9 @@ function unlocked(i) {
 }
 function render() {
   app.innerHTML = `<header class="topbar"><a class="brand" href="#" aria-label="回到島嶼首頁"><span class="brand-icon">✧</span><span>ENGLISH ADVENTURE<span class="brand-sub">ISLAND · 英語冒險島</span></span></a><nav aria-label="主選單"><button id="teacher" class="quiet">題庫工坊</button><button id="ranking" class="quiet">排行榜</button><button id="sound" class="sound" aria-pressed="false">♫ 聲音關閉</button><button id="player" class="player" aria-label="設定冒險家暱稱"><span class="avatar" aria-hidden="true">✦</span><span id="player-name">${esc(state.nickname)}</span></button></nav></header>
-<main><section class="hero"><div class="eyebrow"><span></span> YOUR NEXT ADVENTURE STARTS HERE</div><h1>每一個英文，<br>都是<span>冒險的起點。</span></h1><p>跟著小狐狸 Lumi 探索奇幻島嶼。<br class="mobile-break">收集知識水晶，讓勇氣與英文一起升級。</p><div class="hero-actions"><button class="primary" id="start">${Object.keys(profile().answers).length ? "繼續我的冒險" : "開始我的冒險"} <span>↗</span></button><span class="demo-label">原創示範題 · 國中程度</span></div><div class="hero-stats"><span><b>05</b> 奇幻區域</span><i></i><span><b>04</b> 英文能力</span><i></i><span><b>∞</b> 探索的可能</span></div></section>
+<main>${cloudMode ? '<div class="cloud-status"><span id="cloud-state" role="status"></span><button id="sync-now" class="quiet">重試同步</button></div>' : ""}<section class="hero"><div class="eyebrow"><span></span> YOUR NEXT ADVENTURE STARTS HERE</div><h1>每一個英文，<br>都是<span>冒險的起點。</span></h1><p>跟著小狐狸 Lumi 探索奇幻島嶼。<br class="mobile-break">收集知識水晶，讓勇氣與英文一起升級。</p><div class="hero-actions"><button class="primary" id="start">${Object.keys(profile().answers).length ? "繼續我的冒險" : "開始我的冒險"} <span>↗</span></button><span class="demo-label">原創示範題 · 國中程度</span></div><div class="hero-stats"><span><b>05</b> 奇幻區域</span><i></i><span><b>04</b> 英文能力</span><i></i><span><b>∞</b> 探索的可能</span></div></section>
 <section class="adventure" aria-label="島嶼地圖與任務"><div class="map-heading"><div><span class="eyebrow">THE EXPLORER’S MAP</span><h2>你的冒險地圖 <span>點選地標開始探索</span></h2></div><span class="map-pill"><span></span> 知識群島 · 第一章</span></div><div class="map-layout"><div class="map-scene">${island()}<span class="map-coordinate">N 25° 03′ &nbsp; E 121° 30′<br>一座只屬於你的知識島嶼</span><div class="map-label">THE FLOATING ISLES</div><div class="map-nodes">${STAGES.map((s, i) => `<button class="map-node node-${i} ${i === selected ? "selected" : ""} ${profile().completed.includes(s.id) ? "done" : ""}" data-node="${i}" aria-label="${s.name} ${unlocked(i) ? "選擇地標" : "尚未解鎖"}"><span>${profile().completed.includes(s.id) ? "✓" : s.icon}</span><b>${s.name}</b></button>`).join("")}</div><div class="fox-on-map">${fox}<span>Lumi</span></div><div class="map-legend"><span>✦ 目前任務</span><span>○ 未探索</span><span>✓ 已完成</span></div></div><aside class="quest-panel" id="quest-panel"></aside></div></section>
-<section class="journey"><div class="journey-title"><span class="eyebrow">ONE ISLAND, MANY POSSIBILITIES</span><h2>把學習，變成值得期待的事。</h2></div><div class="feature"><span>✧</span><div><h3>探索，而不只是背誦</h3><p>單字、文法、閱讀與聽力，藏在每一次冒險裡。</p></div></div><div class="feature"><span>❖</span><div><h3>每一步，都看得見成長</h3><p>即時解析與水晶獎勵，陪你找到自己的節奏。</p></div></div></section></main><footer><span>✧ ENGLISH ADVENTURE ISLAND</span><span>為好奇心而造，為每一位冒險家而生。</span><span>第一版 · 本機練習模式</span></footer><dialog id="modal"><div id="modal-body"></div></dialog><div id="toast" role="status"></div>`;
+<section class="journey"><div class="journey-title"><span class="eyebrow">ONE ISLAND, MANY POSSIBILITIES</span><h2>把學習，變成值得期待的事。</h2></div><div class="feature"><span>✧</span><div><h3>探索，而不只是背誦</h3><p>單字、文法、閱讀與聽力，藏在每一次冒險裡。</p></div></div><div class="feature"><span>❖</span><div><h3>每一步，都看得見成長</h3><p>即時解析與水晶獎勵，陪你找到自己的節奏。</p></div></div></section></main><footer><span>✧ ENGLISH ADVENTURE ISLAND</span><span>為好奇心而造，為每一位冒險家而生。</span><span>${cloudMode ? "Cloudflare 雲端成績模式" : "本機練習模式"}</span></footer><dialog id="modal"><div id="modal-body"></div></dialog><div id="toast" role="status"></div>`;
   $("#start").onclick = () => {
     const i = STAGES.findIndex(
       (s, i) =>
@@ -110,8 +122,16 @@ function render() {
     save();
   };
   $("#player").onclick = playerDialog;
-  $("#teacher").onclick = teacherDialog;
-  $("#ranking").onclick = rankingDialog;
+  $("#teacher").textContent = cloudMode ? "老師管理" : "題庫工坊";
+  $("#teacher").onclick = cloudMode
+    ? () => location.assign("/teacher.html")
+    : teacherDialog;
+  $("#ranking").textContent = cloudMode ? "我的成績" : "排行榜";
+  $("#ranking").onclick = cloudMode ? ownCloudResult : rankingDialog;
+  if (cloudMode) {
+    $("#sync-now").onclick = () => syncCloud();
+    updateCloudStatus();
+  }
   $("#modal").addEventListener("close", stopListening);
   $("#modal").addEventListener("cancel", () => {
     stage = null;
@@ -165,6 +185,11 @@ function stopListening() {
   duck(false);
 }
 async function begin() {
+  await cloudReady;
+  if (cloudMode && !cloudUser) {
+    studentLogin(() => begin());
+    return;
+  }
   if (!available(STAGES[selected]) || !unlocked(selected)) return;
   if (!started) {
     started = true;
@@ -215,7 +240,10 @@ function answer(i) {
   const q = question,
     correct = i === q.answerIndex,
     first = !Object.hasOwn(profile().answers, q.id);
-  if (first) profile().answers[q.id] = correct;
+  if (first) {
+    profile().answers[q.id] = correct;
+    if (cloudMode) cloudPicks[q.id] = i;
+  }
   save();
   effect(correct);
   document.querySelectorAll("[data-answer]").forEach((b) => {
@@ -282,6 +310,7 @@ function listen() {
   status.textContent = "正在播放…";
 }
 function showMatching() {
+  if (cloudMode && !profile().completed.includes("matching")) cloudPairs = [];
   show(
     `<div class="eyebrow">星語溪谷 · MATCH & DISCOVER</div><h2>讓單字找到它的夥伴</h2><p>先點英文，再點中文。全部配對即可點亮溪谷！</p><div class="match-grid"><div>${matching.pairs.map((q) => `<button data-left="${esc(q.id)}">${esc(q.word)}</button>`).join("")}</div><div>${[
       ...matching.pairs,
@@ -307,6 +336,8 @@ function matchClick(b) {
     .forEach((n) => n.classList.toggle("picked", n === b));
   if (!matching.left || !matching.right) return;
   const correct = matching.left === matching.right;
+  if (cloudMode && !profile().completed.includes("matching"))
+    cloudPairs.push({ left: matching.left, right: matching.right });
   effect(correct);
   if (correct) {
     matching.found.push(id);
@@ -324,6 +355,7 @@ function matchClick(b) {
     $("#match-status").textContent =
       `還差一點！「${pair.word}」的意思是「${pair.meaning}」。請重新選擇。`;
   }
+  if (cloudMode) persistCloud();
   matching.left = null;
   matching.right = null;
   document
@@ -336,6 +368,23 @@ function matchClick(b) {
   }
 }
 function finish() {
+  if (
+    cloudMode &&
+    !cloudUser.progress.completedStages.includes(stage) &&
+    !cloudQueue[stage]
+  ) {
+    const payload =
+      stage === "matching"
+        ? { pairs: structuredClone(cloudPairs) }
+        : {
+            answers: Object.fromEntries(
+              state.bank.questions
+                .filter((q) => q.type === stage)
+                .map((q) => [q.id, cloudPicks[q.id]]),
+            ),
+          };
+    cloudQueue[stage] = payload;
+  }
   if (!profile().completed.includes(stage)) profile().completed.push(stage);
   save();
   effect(true);
@@ -353,6 +402,7 @@ function finish() {
   };
   $("#export-result").onclick = exportResult;
   paintQuest();
+  if (cloudMode) syncCloud();
 }
 function download(name, text, type = "application/json") {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -370,9 +420,17 @@ function exportResult() {
     crypto.randomUUID(),
   );
   download("island-result.json", JSON.stringify(payload, null, 2));
-  notify("成績已匯出；目前尚未設定遠端回傳。");
+  notify(
+    cloudMode
+      ? "已匯出本機紀錄；官方成績請看雲端同步狀態。"
+      : "成績已匯出；此版本為本機練習模式。",
+  );
 }
 function playerDialog() {
+  if (cloudMode) {
+    studentLogin();
+    return;
+  }
   show(
     `<div class="eyebrow">HELLO, EXPLORER</div><h2>這次冒險，要叫你什麼呢？</h2><p>使用暱稱就好，不需要真實姓名。每個暱稱有各自的進度。</p><form id="name-form"><label for="nickname">冒險家暱稱（1–16 字）</label><input id="nickname" maxlength="16" required value="${esc(state.nickname)}" autocomplete="off"><button class="primary">儲存並開始 →</button></form><button id="reset" class="danger">重設目前暱稱的進度</button>`,
   );
@@ -406,7 +464,7 @@ function rankingDialog() {
       a[1].updatedAt - b[1].updatedAt,
   );
   show(
-    `<div class="eyebrow">LOCAL HALL OF EXPLORERS</div><h2>此裝置冒險家排行榜</h2><p>僅顯示此瀏覽器的紀錄；不是班級共享排行榜。<br>同分以較早更新的紀錄優先。</p><ol class="leaderboard">${rows.map(([n, p]) => `<li><span>${esc(n)}</span><b>❖ ${scoreFor(state.bank, p)}</b></li>`).join("")}</ol><button id="export-result" class="secondary">匯出我的成績 JSON</button><p class="mode-note">成績儲存於裝置，可被修改；尚未連接 Google Apps Script。</p>`,
+    `<div class="eyebrow">LOCAL HALL OF EXPLORERS</div><h2>此裝置冒險家排行榜</h2><p>僅顯示此瀏覽器的紀錄；不是班級共享排行榜。<br>同分以較早更新的紀錄優先。</p><ol class="leaderboard">${rows.map(([n, p]) => `<li><span>${esc(n)}</span><b>❖ ${scoreFor(state.bank, p)}</b></li>`).join("")}</ol><button id="export-result" class="secondary">匯出我的成績 JSON</button><p class="mode-note">成績儲存於裝置，可被修改；不會傳送至 Google 或其他服務。</p>`,
   );
   $("#export-result").onclick = exportResult;
 }
@@ -450,8 +508,173 @@ function applyBank(bank) {
   render();
   notify("題庫已套用，新的冒險準備好了！");
 }
+const cloudReady = cloudAvailable().then(async (enabled) => {
+  cloudMode = enabled;
+  if (enabled) {
+    try {
+      await restoreCloud(await api("student/me"));
+    } catch (e) {
+      cloudUser = null;
+      if (e.status !== 401) console.warn("Cloud session unavailable");
+    }
+    render();
+    if (cloudUser) syncCloud();
+  }
+});
 render();
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) stopListening();
+});
+
+function pendingKey() {
+  return "eai-cloud-" + cloudUser.progress.runId;
+}
+function persistCloud() {
+  if (!cloudUser) return;
+  try {
+    sessionStorage.setItem(
+      pendingKey(),
+      JSON.stringify({
+        picks: cloudPicks,
+        pairs: cloudPairs,
+        queue: cloudQueue,
+        answers: profile().answers,
+        completed: profile().completed,
+      }),
+    );
+  } catch {
+    notify("此裝置無法暫存尚未同步的答案，請保持網路連線。");
+  }
+}
+async function restoreCloud(user) {
+  cloudUser = user;
+  state.bank = user.bank;
+  state.nickname = `${user.className} · ${user.seat} 號`;
+  state.profiles = { [state.nickname]: freshProfile() };
+  cloudPicks = {};
+  cloudPairs = [];
+  cloudQueue = {};
+  for (const result of user.progress.stages) {
+    if (result.stage !== "matching")
+      for (const [id, index] of Object.entries(result.answers)) {
+        cloudPicks[id] = index;
+        const q = state.bank.questions.find((q) => q.id === id);
+        if (q) profile().answers[id] = index === q.answerIndex;
+      }
+  }
+  profile().completed = [...user.progress.completedStages];
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(pendingKey()));
+    if (cached && cached.picks && cached.queue) {
+      cloudPicks = { ...cloudPicks, ...cached.picks };
+      cloudPairs = cached.pairs || [];
+      cloudQueue = cached.queue;
+      for (const id of user.progress.completedStages) delete cloudQueue[id];
+      Object.assign(profile().answers, cached.answers || {});
+      profile().completed = [
+        ...new Set([...profile().completed, ...Object.keys(cloudQueue)]),
+      ];
+    }
+  } catch {
+    /* invalid partial data is ignored; official server data remains authoritative */
+  }
+}
+function updateCloudStatus(text) {
+  const node = $("#cloud-state");
+  if (!node) return;
+  node.textContent =
+    text ||
+    (!cloudUser
+      ? "雲端成績模式：請先輸入班級、座號及個別入場碼。"
+      : Object.keys(cloudQueue).length
+        ? `${state.nickname} · 有 ${Object.keys(cloudQueue).length} 關等待同步，請保持此分頁開啟。`
+        : `${state.nickname} · 已儲存 ${cloudUser.progress.completedStages.length} 關至 Cloudflare D1`);
+  $("#sync-now").hidden = !cloudUser || !Object.keys(cloudQueue).length;
+}
+async function syncCloud() {
+  if (!cloudUser || cloudSyncing) return;
+  cloudSyncing = true;
+  try {
+    for (const s of STAGES) {
+      if (!cloudQueue[s.id]) continue;
+      updateCloudStatus("正在儲存成績至 Cloudflare D1…");
+      const data = await post("student/stages/" + s.id, cloudQueue[s.id]);
+      cloudUser.progress = data.progress;
+      delete cloudQueue[s.id];
+      persistCloud();
+    }
+    updateCloudStatus();
+  } catch (e) {
+    if (e.status === 401) cloudUser = null;
+    updateCloudStatus(
+      "尚未儲存：" + e.message + " 請點重試同步，或重新登入後再試。",
+    );
+  } finally {
+    cloudSyncing = false;
+  }
+}
+function studentLogin(after) {
+  show(
+    `<div class="eyebrow">CLASSROOM ADVENTURE</div><h2>${cloudUser ? "學生帳號" : "輸入班級與座號，開始冒險"}</h2><p>使用老師個別發給你的入場碼，請勿分享；不需要真實姓名。關卡完成後會自動儲存至 Cloudflare。</p>${cloudUser ? `<p>目前：${esc(state.nickname)}</p><button id="student-logout" class="secondary">登出並切換學生</button>` : `<form id="student-login"><label for="student-class">班級</label><input id="student-class" required maxlength="30" placeholder="例如：701" autocomplete="off"><label for="student-seat">座號</label><input id="student-seat" required type="number" min="1" max="100"><label for="student-code">個別入場碼</label><input id="student-code" required type="password" maxlength="32" autocomplete="off"><button class="primary">登入並開始冒險 →</button></form>`}<p id="login-status" role="status"></p>`,
+  );
+  if (cloudUser) {
+    $("#student-logout").onclick = async () => {
+      if (
+        Object.keys(cloudQueue).length &&
+        !confirm("仍有未儲存關卡，登出會清除暫存。確定登出？")
+      )
+        return;
+      try {
+        await post("student/logout", {});
+        sessionStorage.removeItem(pendingKey());
+        cloudUser = null;
+        cloudPicks = {};
+        cloudQueue = {};
+        cloudPairs = [];
+        state.nickname = "冒險家";
+        state.profiles = { 冒險家: freshProfile() };
+        state.bank = structuredClone(DEMO);
+        $("#modal").close();
+        selected = 0;
+        render();
+      } catch (e) {
+        $("#login-status").textContent = e.message;
+      }
+    };
+    return;
+  }
+  $("#student-login").onsubmit = async (e) => {
+    e.preventDefault();
+    e.submitter.disabled = true;
+    try {
+      await post("student/login", {
+        className: $("#student-class").value.trim(),
+        seat: Number($("#student-seat").value),
+        entryCode: $("#student-code").value.trim(),
+      });
+      await restoreCloud(await api("student/me"));
+      $("#modal").close();
+      selected = 0;
+      render();
+      await syncCloud();
+      if (after) after();
+    } catch (error) {
+      $("#login-status").textContent = error.message;
+      e.submitter.disabled = false;
+    }
+  };
+}
+function ownCloudResult() {
+  if (!cloudUser) {
+    studentLogin();
+    return;
+  }
+  const p = cloudUser.progress;
+  show(
+    `<div class="eyebrow">MY CLOUD RESULTS</div><h2>${esc(state.nickname)} 的成績</h2><p>以下為伺服器已確認紀錄，不包含尚未同步的關卡。</p><p>得分：${p.score} / ${p.maxScore}<br>答對：${p.correctCount} / ${p.questionCount}<br>正確率：${p.accuracy}%<br>完成關卡：${p.completedStages.length} / ${p.totalStages}<br>完成時間：${p.completedAt ? new Date(p.completedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }) : "尚未全部完成"}<br>經過時間：${p.elapsedSeconds} 秒</p><p class="mode-note">不提供其他學生的成績查詢。老師排行榜請至受保護的管理頁。</p>`,
+  );
+}
+window.addEventListener("online", () => {
+  if (cloudMode) syncCloud();
 });
