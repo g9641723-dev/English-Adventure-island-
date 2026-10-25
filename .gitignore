@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+*.log
+artifacts/
+.wrangler/
+English-Adventure-Island.html
+exports/

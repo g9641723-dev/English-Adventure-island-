@@ -1,0 +1,20 @@
+{
+  "name": "english-adventure-island",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/core.test.js",
+    "test:e2e": "playwright test",
+    "inspect:game": "node tests/inspect-game.mjs",
+    "build:portable": "node scripts/build-portable.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "esbuild": "0.28.2",
+    "vite": "^7.1.0"
+  }
+}
