@@ -16,7 +16,7 @@
     },
   ],
   "vars": {
-    "APP_ORIGINS": "https://english-adventure-island-3jp.pages.dev",
+    "APP_ORIGINS": "https://english-adventure-island-5om.pages.dev",
     "ACCESS_TEAM_DOMAIN": "REPLACE.cloudflareaccess.com",
     "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
     "TEACHER_EMAILS": "g9641723@gmail.com",
