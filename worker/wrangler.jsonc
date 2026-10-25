@@ -11,12 +11,12 @@
     {
       "binding": "DB",
       "database_name": "english-island-results",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "87103fb7-ffae-4214-9b80-bef003bfc7e9",
       "migrations_dir": "migrations",
     },
   ],
   "vars": {
-    "APP_ORIGINS": "https://REPLACE.pages.dev",
+    "APP_ORIGINS": "https://english-adventure-island-3jp.pages.dev",
     "ACCESS_TEAM_DOMAIN": "REPLACE.cloudflareaccess.com",
     "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUDIENCE",
     "TEACHER_EMAILS": "g9641723@gmail.com",
