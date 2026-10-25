@@ -86,3 +86,10 @@ Pages 靜態資源由 Pages 提供；只有 `/api/*` 進入 Functions 及 Worker
 根目錄的 `wrangler.jsonc` 屬於 Pages（`english-adventure-island`）；`worker/wrangler.jsonc` 屬於後端（`english-island-api`）。Workers Builds 可能依根目錄設定顯示名稱不一致提醒；不要只為消除此提醒把 Pages 的名稱改成 Worker 名稱。後端部署必須使用明確的 `--config worker/wrangler.jsonc`。
 
 排查時以新建置的分支與提交為準。舊的 `main · Manually deployed` 紀錄即使重試仍缺少 package-lock.json；推送正確分支後，應在新的觸發紀錄中檢查分支為 `feature/cloudflare-classroom`，若沒有新紀錄則再檢查 Git 建置連線與觸發狀態。
+
+
+### 既有 Pages 專案的建置設定
+
+在 Pages 的 Settings → Build configuration 設定 Build command 為 `npm run build:cloud`、Build output directory 為 `dist`，Root directory 保持預設；Production branch 使用 `feature/cloudflare-classroom`。若建置命令與輸出目錄空白，並不會自動產生本遊戲需要的 dist 產物。
+
+保存設定後，推送新的分支提交或對正確分支的既有紀錄執行 Retry deployment，再觀察新建置；設定保存不會把先前的失敗紀錄變成成功。成功前，Production 可能顯示 No production deployment yet。若再次失敗，以該筆 Details 中的實際錯誤診斷，不重建資料庫或改動已成功的私有 API Worker。
