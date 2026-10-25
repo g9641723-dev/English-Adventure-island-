@@ -64,3 +64,18 @@ CHROMIUM_PATH=/usr/bin/chromium npm run test:cloud
 Pages 靜態資源由 Pages 提供；只有 `/api/*` 進入 Functions 及 Worker，減少不必要呼叫。D1 採索引、SQL 綁定、關卡一次提交與去重，沒有即時輪詢或第三方分析服務。老師手動刷新才查詢成績；免費額度耗盡可能導致服務暫停或失敗，此時保留待同步提示，不自動付費升級。
 
 正式上線後請在 Cloudflare 控制台監看 Workers Requests／CPU、D1 儲存及讀寫額度、Access 老師用戶數和 Pages 建置次數。服務使用兩層 Worker（Pages Function＋私有 API Worker），API 成本不只是一個入口呼叫。首次實班先以小班測試，再依實際用量評估。
+
+
+## GitHub 連接後的 Worker 建置設定
+
+使用 Cloudflare 控制台的 GitHub 連接時，可由使用者在控制台自行授權，不需要把 API Token 提供給代理。既有 `english-island-api` Worker 的 Production branch 必須選 `feature/cloudflare-classroom`，此分支包含根目錄的 package.json 與 package-lock.json。
+
+- Root directory／Path：`/`。
+- Build command：`npm ci`。
+- Deploy command：`npx wrangler deploy --config worker/wrangler.jsonc`。
+- 若介面要求 Preview command：`npx wrangler versions upload --config worker/wrangler.jsonc`；正式版本仍由 Deploy command 發布。
+- Build cache 可保持開啟或關閉，不會修復錯誤的來源分支。
+- 若控制台沒有 Save 按鈕，切到其他頁再返回確認 Production branch 是否仍是指定值；不要只因畫面沒有按鈕就重建專案。
+- 新提交推送後，到 Builds／Deployments 確認新紀錄的分支為 `feature/cloudflare-classroom`，不重試舊的 main 建置。
+
+這一步只部署後端。老師 Access 設定、Pages 前端及公開網址驗證仍須接續完成；不能把後端建置成功當成整套系統已上線。
