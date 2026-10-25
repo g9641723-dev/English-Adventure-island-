@@ -9,7 +9,7 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 const port = 4180,
   origin = `http://127.0.0.1:${port}`;
 const pair = await generateKeyPair("RS256", { extractable: true });
-const jwt = await new SignJWT({ email: "g9641723@dsjh.ptc.edu.tw" })
+const jwt = await new SignJWT({ email: "g9641723@gmail.com" })
   .setProtectedHeader({ alg: "RS256" })
   .setIssuer("https://island-test.cloudflareaccess.com")
   .setAudience("test-audience")
@@ -34,7 +34,7 @@ const mf = new Miniflare({
     APP_ORIGINS: origin,
     ACCESS_TEAM_DOMAIN: "island-test.cloudflareaccess.com",
     ACCESS_AUD: "test-audience",
-    TEACHER_EMAILS: "g9641723@dsjh.ptc.edu.tw",
+    TEACHER_EMAILS: "g9641723@gmail.com",
     TEST_PUBLIC_KEY: JSON.stringify(await exportJWK(pair.publicKey)),
   },
 });

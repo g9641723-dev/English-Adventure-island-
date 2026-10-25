@@ -8,7 +8,7 @@
 
 1. 登入 Cloudflare，確認使用的帳戶及 Workers／D1 為 Free，不要選擇升級 Workers Paid 或購買方案。
 2. 建立 Zero Trust 團隊，選 **Free** 方案；老師帳號只有已允許的老師，學生不使用 Access 帳號。若介面要求選方案或付款，先確認頁面實際選的是 Free，不授權任何升級。
-3. 在 Zero Trust 的 Authentication／Login methods 啟用 **One-time PIN**（Email 一次性驗證碼）。老師允許名單目前為 `g9641723@dsjh.ptc.edu.tw`。
+3. 在 Zero Trust 的 Authentication／Login methods 啟用 **One-time PIN**（Email 一次性驗證碼）。老師允許名單目前為 `g9641723@gmail.com`。
 4. 在使用者 Cloudflare Profile → API Tokens 建立僅限該帳戶的 Token。部署需要 Pages Edit、Workers Scripts Edit、D1 Edit、Access Apps and Policies Edit，以及讀取 Access Organization／Identity Providers 的權限。Cloudflare 當前權限名稱若有變化，依該介面相應項目選擇，不加入帳單或方案修改權限。
 5. 將 Token 安全填到本雲端環境設定的 `CLOUDFLARE_API_TOKEN`，非機密帳戶 ID 填到 `CLOUDFLARE_ACCOUNT_ID`。不要將 Token 貼在聊天、Git 或前端程式。設定已存在時直接沿用，不重複建立。
 6. 審查、儲存環境設定並依介面要求發布／套用；回到任務讓代理重新確認設定是否已注入。

@@ -18,7 +18,7 @@ export function requireDeploymentConfig(env, freeConfirmed) {
   return {
     account: env.CLOUDFLARE_ACCOUNT_ID,
     token: env.CLOUDFLARE_API_TOKEN,
-    email: env.TEACHER_EMAILS || "g9641723@dsjh.ptc.edu.tw",
+    email: env.TEACHER_EMAILS || "g9641723@gmail.com",
     project:
       env.CF_PAGES_PROJECT ||
       "english-island-" + env.CLOUDFLARE_ACCOUNT_ID.slice(0, 8),
@@ -199,7 +199,7 @@ async function main() {
     );
     console.log(
       "Teacher allowlist: " +
-        (process.env.TEACHER_EMAILS || "g9641723@dsjh.ptc.edu.tw"),
+        (process.env.TEACHER_EMAILS || "g9641723@gmail.com"),
     );
     console.log(
       "Requires a Free Zero Trust team with One-time PIN. No billing or plan-change API is used.",
