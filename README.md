@@ -2,7 +2,15 @@
 
 國中生奇幻島嶼英文遊戲：保留原創浮空島、狐狸 Lumi、動畫與聲音，以及單字、配對、文法、閱讀、聽力五區玩法。
 
-目前新增 Cloudflare 全套成績架構：**Pages 遊戲＋Workers API＋D1 成績＋Access 老師登入**。不使用 Google Apps Script 或 Google 試算表。程式與本機驗證已完成；公開部署仍需使用者帳戶授權，沒有上線前不提供猜測網址。
+目前新增 Cloudflare 全套成績架構：**Pages 遊戲＋Workers API＋D1 成績＋Access 老師登入**。不使用 Google Apps Script 或 Google 試算表。Pages 與 API 已由使用者在 Cloudflare 控制台完成部署，老師 Access 登入仍待設定與驗證。
+
+## 移至桌面版 Codex
+
+先閱讀 [HANDOFF.md](HANDOFF.md)，其中記錄實際部署資源、尚未完成的工作、測試範圍與給桌面版 Codex 的接手提示。解壓縮完整 ZIP 後，以整個 `English-Adventure-Island` 資料夾作為桌面版 Codex 專案。
+
+只想玩遊戲可直接開啟 `English-Adventure-Island.html`，不必安裝 Node.js；要繼續開發則安裝 Node.js 24 LTS，再執行 `npm ci` 與 `npm run dev -- --host 127.0.0.1 --open`。
+
+打包完整專案：`python scripts/package-windows.py --output English-Adventure-Island-Desktop-Codex.zip`。不包含 Git 歷史、Token、學生成績或 node_modules；原本的 Cloudflare 資料庫仍保留在雲端。
 
 ## 學生與老師
 
@@ -41,7 +49,7 @@ JSON／CSV 範本位於 `public/templates/`。題庫最多 200 題、1 MB，需�
 
 `English-Adventure-Island.html` 可直接由 Edge／Chrome 開啟；`START-GAME.bat` 也能啟動。此版完全是本機練習，不回傳成績。修改原始碼後用 `npm run build:portable` 更新，詳見 [Windows 說明](docs/WINDOWS.md)。
 
-先前 `exports/` 的 ZIP 是舊本機版快照，不代表這次已部署的雲端系統。新版本應從目前分支的完整原始碼與文件審查，正式網址必須待真實部署成功後才產生。
+先前 `English-Adventure-Island-Windows.zip` 是舊本機版快照；本次 `English-Adventure-Island-Desktop-Codex.zip` 包含完整前後端與接手文件。已部署網址與權限待辦以 HANDOFF.md 為準。
 
 ## 文件
 
