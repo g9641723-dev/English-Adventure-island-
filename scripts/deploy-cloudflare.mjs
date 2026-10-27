@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function requireDeploymentConfig(env, freeConfirmed) {
   if (!freeConfirmed)
     throw Error(
-      "請先在 Cloudflare 控制台確認 Workers、D1 與 Zero Trust 都使用 Free 方案，再加 --free-plan-confirmed；程式不會升級方案。",
+      "請先在 Cloudflare 控制台確認 Workers 與 D1 都使用 Free 方案，再加 --free-plan-confirmed；程式不會升級方案。",
     );
   for (const name of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"])
     if (!env[name])
@@ -59,16 +59,6 @@ export async function provision(config, { api, run, save, receipt = {} }) {
     throw Error("部署紀錄屬於其他帳戶，請先檢查 .cloudflare/deployment.json。");
   if (receipt.project && receipt.project !== project)
     throw Error("專案名稱與部署紀錄不同，請先檢查，避免覆蓋其他網站。");
-  const org = await api(base + "/access/organizations");
-  if (!org?.auth_domain || !org.auth_domain.endsWith(".cloudflareaccess.com"))
-    throw Error(
-      "請先建立 Cloudflare Zero Trust Free 團隊並啟用 Email One-time PIN；尚未建立任何網站或資料庫。",
-    );
-  const idps = await api(base + "/access/identity_providers");
-  if (!idps.some((p) => p.type === "onetimepin"))
-    throw Error(
-      "請在 Zero Trust → Settings → Authentication 啟用 One-time PIN，毋須付費服務。",
-    );
   let page;
   try {
     page = await api(base + "/pages/projects/" + project);
@@ -102,48 +92,6 @@ export async function provision(config, { api, run, save, receipt = {} }) {
     });
   receipt.databaseId = db.uuid;
   await save(receipt);
-  let app;
-  if (receipt.accessAppId)
-    app = await api(base + "/access/apps/" + receipt.accessAppId);
-  else {
-    app = await api(base + "/access/apps", {
-      method: "POST",
-      body: JSON.stringify({
-        name: project + " teachers",
-        type: "self_hosted",
-        domain: page.subdomain + "/teacher.html",
-        self_hosted_domains: [
-          page.subdomain + "/teacher.html",
-          page.subdomain + "/api/admin/*",
-        ],
-        session_duration: "8h",
-        app_launcher_visible: false,
-        allowed_idps: idps
-          .filter((x) => x.type === "onetimepin")
-          .map((x) => x.id),
-        auto_redirect_to_identity: true,
-      }),
-    });
-    receipt.accessAppId = app.id;
-    await save(receipt);
-  }
-  if (!receipt.accessPolicyId) {
-    const policy = await api(base + "/access/apps/" + app.id + "/policies", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Approved teachers only",
-        decision: "allow",
-        precedence: 1,
-        include: config.email
-          .split(",")
-          .map((email) => ({ email: { email: email.trim() } })),
-      }),
-    });
-    receipt.accessPolicyId = policy.id;
-    await save(receipt);
-  }
-  if (!app.aud)
-    throw Error("Access 尚未回傳 Audience，停止部署；請檢查 Access 應用。");
   const workerConfig = {
     $schema: resolve(root, "node_modules/wrangler/config-schema.json"),
     name: worker,
@@ -164,8 +112,6 @@ export async function provision(config, { api, run, save, receipt = {} }) {
     ],
     vars: {
       APP_ORIGINS: receipt.studentUrl,
-      ACCESS_TEAM_DOMAIN: org.auth_domain,
-      ACCESS_AUD: app.aud,
       TEACHER_EMAILS: config.email,
     },
   };
@@ -181,7 +127,7 @@ export async function provision(config, { api, run, save, receipt = {} }) {
   await run("build", {});
   await run("pages", {});
   receipt.deployedAt = new Date().toISOString();
-  receipt.accessTeamDomain = org.auth_domain;
+  receipt.teacherAuth = "password";
   await save(receipt);
   return receipt;
 }
@@ -202,7 +148,7 @@ async function main() {
         (process.env.TEACHER_EMAILS || "g9641723@gmail.com"),
     );
     console.log(
-      "Requires a Free Zero Trust team with One-time PIN. No billing or plan-change API is used.",
+      "Uses a privately configured teacher password Secret, not Zero Trust. No billing or plan-change API is used.",
     );
     return;
   }
@@ -304,23 +250,19 @@ async function main() {
       "已送出部署，但公開 API readiness 檢查未通過；不可宣稱網站已就緒。",
     );
   const teacher = await fetch(result.teacherUrl, {
-    redirect: "manual",
     signal: AbortSignal.timeout(20000),
   });
-  const target = teacher.headers.get("Location") || "";
-  if (
-    ![301, 302, 303, 307, 308, 401, 403].includes(teacher.status) ||
-    (teacher.status < 400 && !target.includes(result.accessTeamDomain))
-  )
-    throw Error(
-      "公開老師頁尚未觀察到 Access 保護，請檢查 Access 路徑；不可分發老師網址。",
-    );
+  const gate = await fetch(result.studentUrl + "/api/admin/me", {
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!teacher.ok || ![401, 503].includes(gate.status))
+    throw Error("老師登入頁或未登入 API 保護檢查未通過；不可宣稱就緒。");
   result.publicReadinessVerifiedAt = new Date().toISOString();
   await save(result);
   console.log("Student URL: " + result.studentUrl);
   console.log("Teacher URL: " + result.teacherUrl);
   console.log(
-    "Public API and unauthenticated Access gate verified; teacher OTP login still requires the authorized teacher.",
+    "Public API and unauthenticated teacher API protection verified; configure TEACHER_PASSWORD_HASH privately, then verify actual teacher login.",
   );
 }
 if (

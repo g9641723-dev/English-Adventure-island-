@@ -5,20 +5,13 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
-import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { createPasswordHash } from "../src/password.js";
 const port = 4180,
   origin = `http://127.0.0.1:${port}`;
-const pair = await generateKeyPair("RS256", { extractable: true });
-const jwt = await new SignJWT({ email: "g9641723@gmail.com" })
-  .setProtectedHeader({ alg: "RS256" })
-  .setIssuer("https://island-test.cloudflareaccess.com")
-  .setAudience("test-audience")
-  .setIssuedAt()
-  .setExpirationTime("1h")
-  .sign(pair.privateKey);
+const passwordHash = await createPasswordHash("Local test password only 2026!");
 const dir = await mkdtemp(join(tmpdir(), "island-cloud-"));
 await build({
-  entryPoints: ["tests/fixtures/access-worker.js"],
+  entryPoints: ["worker/index.js"],
   bundle: true,
   format: "esm",
   outfile: join(dir, "worker.mjs"),
@@ -32,10 +25,8 @@ const mf = new Miniflare({
   d1Databases: ["DB"],
   bindings: {
     APP_ORIGINS: origin,
-    ACCESS_TEAM_DOMAIN: "island-test.cloudflareaccess.com",
-    ACCESS_AUD: "test-audience",
+    TEACHER_PASSWORD_HASH: passwordHash,
     TEACHER_EMAILS: "g9641723@gmail.com",
-    TEST_PUBLIC_KEY: JSON.stringify(await exportJWK(pair.publicKey)),
   },
 });
 const db = await mf.getD1Database("DB");
@@ -57,12 +48,6 @@ const server = createServer(async (req, res) => {
           ].includes(k)
         )
           headers.set(k, String(v));
-      if (
-        req.headers.cookie
-          ?.split(";")
-          .some((x) => x.trim() === "eai_test_teacher=allow")
-      )
-        headers.set("Cf-Access-Jwt-Assertion", jwt);
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       const body = Buffer.concat(chunks);

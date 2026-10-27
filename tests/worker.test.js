@@ -5,24 +5,12 @@ import { build } from "esbuild";
 import { readFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { createPasswordHash, verifyPassword } from "../src/password.js";
 import { DEMO } from "../src/core.js";
 import { csvCell, gradeStage } from "../worker/index.js";
-let mf, db, key, jwt;
-const origin = "https://island.test";
-async function token(
-  email = "teacher@example.test",
-  aud = "test-audience",
-  expiry = "1h",
-) {
-  return new SignJWT({ email })
-    .setProtectedHeader({ alg: "RS256" })
-    .setIssuer("https://island-test.cloudflareaccess.com")
-    .setAudience(aud)
-    .setIssuedAt()
-    .setExpirationTime(expiry)
-    .sign(key.privateKey);
-}
+let mf, db, teacherSession, passwordHash;
+const origin = "https://island.test",
+  teacherPassword = "Local test password only 2026!";
 async function call(
   path,
   { method = "GET", body, cookie, teacher = false, headers = {} } = {},
@@ -32,8 +20,7 @@ async function call(
     headers: {
       Origin: origin,
       ...(body ? { "Content-Type": "application/json" } : {}),
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(teacher ? { "Cf-Access-Jwt-Assertion": jwt } : {}),
+      ...(cookie || teacher ? { Cookie: cookie || teacherSession } : {}),
       ...headers,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -59,11 +46,10 @@ async function login(c, seat = 1) {
   return r.headers.get("Set-Cookie").split(";")[0];
 }
 before(async () => {
-  key = await generateKeyPair("RS256", { extractable: true });
-  jwt = await token();
+  passwordHash = await createPasswordHash(teacherPassword);
   const dir = await mkdtemp(join(tmpdir(), "island-worker-"));
   await build({
-    entryPoints: ["tests/fixtures/access-worker.js"],
+    entryPoints: ["worker/index.js"],
     bundle: true,
     format: "esm",
     outfile: join(dir, "worker.mjs"),
@@ -77,36 +63,133 @@ before(async () => {
     d1Databases: ["DB"],
     bindings: {
       APP_ORIGINS: origin,
-      ACCESS_TEAM_DOMAIN: "island-test.cloudflareaccess.com",
-      ACCESS_AUD: "test-audience",
+      TEACHER_PASSWORD_HASH: passwordHash,
       TEACHER_EMAILS: "teacher@example.test",
-      TEST_PUBLIC_KEY: JSON.stringify(await exportJWK(key.publicKey)),
     },
   });
   db = await mf.getD1Database("DB");
   await db.exec(await readFile("worker/migrations/0001_schema.sql", "utf8"));
   await db.exec(await readFile("worker/migrations/0002_demo.sql", "utf8"));
+  assert.equal(
+    await db
+      .prepare("SELECT name FROM sqlite_master WHERE name='teacher_sessions'")
+      .first(),
+    null,
+  );
+  const login = await call("/api/teacher/login", {
+    method: "POST",
+    body: { email: "teacher@example.test", password: teacherPassword },
+  });
+  assert.equal(login.status, 200, await login.clone().text());
+  teacherSession = login.headers.get("Set-Cookie").split(";")[0];
 });
 after(async () => {
   await mf?.dispose();
 });
-test("Access requires a valid signature, audience, expiry and teacher allowlist", async () => {
+test("password login is required and Access headers cannot bypass it", async () => {
   assert.equal((await call("/api/admin/report")).status, 401);
-  for (const bad of [
-    "forged",
-    await token("other@example.test"),
-    await token("teacher@example.test", "wrong"),
-    await token("teacher@example.test", "test-audience", "-1h"),
+  assert.equal(
+    (
+      await call("/api/admin/report", {
+        headers: { "Cf-Access-Jwt-Assertion": "forged" },
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await call("/api/admin/report", {
+        cookie: "eai_teacher=" + "0".repeat(32),
+      })
+    ).status,
+    401,
+  );
+  assert.equal((await call("/api/admin/me", { teacher: true })).status, 200);
+  const config = await (await call("/api/teacher/config")).json();
+  assert.equal(config.configured, true);
+  assert.equal(JSON.stringify(config).includes(passwordHash), false);
+  const row = await db
+    .prepare("SELECT * FROM teacher_sessions LIMIT 1")
+    .first();
+  assert.notEqual(row.token_hash, teacherSession.split("=")[1]);
+  assert.equal(row.email, "teacher@example.test");
+  for (const body of [
+    { email: "teacher@example.test", password: "Wrong password example 123" },
+    { email: "student@example.test", password: teacherPassword },
   ])
     assert.equal(
       (
-        await call("/api/admin/report", {
-          headers: { "Cf-Access-Jwt-Assertion": bad },
+        await call("/api/teacher/login", {
+          method: "POST",
+          body,
+          headers: { "CF-Connecting-IP": "192.0.2.20" },
         })
       ).status,
-      403,
+      401,
     );
-  assert.equal((await call("/api/admin/me", { teacher: true })).status, 200);
+});
+test("salted password hashes and wrong passwords validate without plaintext storage", async () => {
+  const next = await createPasswordHash(teacherPassword);
+  assert.notEqual(next, passwordHash);
+  assert.equal(await verifyPassword(teacherPassword, next), true);
+  assert.equal(await verifyPassword("Wrong password example 123", next), false);
+  assert.equal(await verifyPassword(teacherPassword, "invalid"), false);
+  await assert.rejects(createPasswordHash("short"));
+  assert(!next.includes(teacherPassword));
+});
+test("teacher logout, expired sessions and credential-version mismatch invalidate access", async () => {
+  async function freshCookie() {
+    const r = await call("/api/teacher/login", {
+      method: "POST",
+      body: { email: "teacher@example.test", password: teacherPassword },
+      headers: { "CF-Connecting-IP": "192.0.2.21" },
+    });
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get("Set-Cookie"), /HttpOnly; SameSite=Strict/);
+    assert.match(r.headers.get("Set-Cookie"), /Secure/);
+    return r.headers.get("Set-Cookie").split(";")[0];
+  }
+  const cookie = await freshCookie();
+  assert.equal(
+    (await call("/api/teacher/logout", { method: "POST", body: {}, cookie }))
+      .status,
+    200,
+  );
+  assert.equal((await call("/api/admin/report", { cookie })).status, 401);
+  const expired = await freshCookie();
+  const { digest } = await import("../worker/index.js");
+  await db
+    .prepare("UPDATE teacher_sessions SET expires_at=0 WHERE token_hash=?")
+    .bind(await digest(expired.split("=")[1]))
+    .run();
+  assert.equal(
+    (await call("/api/admin/report", { cookie: expired })).status,
+    401,
+  );
+  const stale = await freshCookie();
+  await db
+    .prepare(
+      "UPDATE teacher_sessions SET auth_tag='old-version' WHERE token_hash=?",
+    )
+    .bind(await digest(stale.split("=")[1]))
+    .run();
+  assert.equal(
+    (await call("/api/admin/report", { cookie: stale })).status,
+    401,
+  );
+});
+test("teacher login limits password attempts", async () => {
+  let r;
+  for (let i = 0; i < 6; i++)
+    r = await call("/api/teacher/login", {
+      method: "POST",
+      body: {
+        email: "teacher@example.test",
+        password: "incorrect long password",
+      },
+      headers: { "CF-Connecting-IP": "192.0.2.22" },
+    });
+  assert.equal(r.status, 429);
 });
 test("CSRF, content type, invalid bank and SQL injection filter are rejected", async () => {
   assert.equal(
@@ -314,4 +397,39 @@ test("login throttling returns 429 and does not disclose roster", async () => {
       body: { className: "none", seat: 1, entryCode: "0".repeat(32) },
     });
   assert.equal(r.status, 429);
+});
+
+test("missing or malformed teacher Secret fails closed without a bootstrap registration path", async () => {
+  const { createHandler } = await import("../worker/index.js");
+  const handle = createHandler();
+  for (const hash of [undefined, "invalid"]) {
+    const env = {
+      DB: db,
+      APP_ORIGINS: origin,
+      TEACHER_EMAILS: "teacher@example.test",
+      TEACHER_PASSWORD_HASH: hash,
+    };
+    const config = await handle(
+      new Request(origin + "/api/teacher/config"),
+      env,
+    );
+    assert.equal((await config.json()).configured, false);
+    const r = await handle(
+      new Request(origin + "/api/teacher/login", {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "teacher@example.test",
+          password: teacherPassword,
+        }),
+      }),
+      env,
+    );
+    assert.equal(r.status, 503);
+    assert.equal(r.headers.get("Set-Cookie"), null);
+    assert.equal(
+      (await handle(new Request(origin + "/api/admin/report"), env)).status,
+      503,
+    );
+  }
 });

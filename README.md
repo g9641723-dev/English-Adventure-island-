@@ -2,14 +2,18 @@
 
 國中生奇幻島嶼英文遊戲：保留原創浮空島、狐狸 Lumi、動畫與聲音，以及單字、配對、文法、閱讀、聽力五區玩法。
 
-目前新增 Cloudflare 全套成績架構：**Pages 遊戲＋Workers API＋D1 成績＋Access 老師登入**。不使用 Google Apps Script 或 Google 試算表。程式與本機驗證已完成；公開部署仍需使用者帳戶授權，沒有上線前不提供猜測網址。
+目前新增 Cloudflare 全套成績架構：**Pages 遊戲＋Workers API＋D1 成績＋老師帳密登入**。不使用 Google Apps Script 或 Google 試算表。網站與 API 已部署；老師登入改用後端 Secret 設定的密碼，不必開通 Zero Trust 或綁付款方式。
+
+## 老師登入（不綁卡）
+
+請依 [私下設定老師密碼](docs/TEACHER_LOGIN.md) 操作：在自己的瀏覽器產生加鹽密碼雜湊，再安全儲存到現有 `english-island-api` Worker 的 `TEACHER_PASSWORD_HASH` Secret。不要把密碼或雜湊值貼到聊天／Git。首次正確登入會自動建立老師 Session 表，保留原有學生資料。
 
 ## 學生與老師
 
 - 學生開始前輸入班級、座號及老師發的個別入場碼，不需真實姓名。
 - 每關完成自動送出首次作答，後端計分、保存正確率與伺服器時間。斷線清楚顯示待同步，支援重試，重送不重複加分。
-- 老師以 `g9641723@gmail.com` 的 Access Email 驗證碼登入，可建班／發碼、發布題庫、查看班級成績／排行榜／平均分數／完成率及匯出 CSV。
-- 學生只能讀寫自己的紀錄；老師 API 驗證 JWT，不依賴前端隱藏功能。
+- 老師以 `g9641723@gmail.com` 及自訂密碼登入，可建班／發碼、發布題庫、查看班級成績／排行榜／平均分數／完成率及匯出 CSV。
+- 學生只能讀寫自己的紀錄；老師 API 驗證伺服器 Session，不依賴前端隱藏功能。
 
 詳細操作與部署見 [Cloudflare 設定指南](docs/CLOUDFLARE.md)，資料及權限定義見 [成績系統設計](docs/INTEGRATION.md)。
 
@@ -27,7 +31,7 @@ npm run build:cloud
 npm run test:cloud
 ```
 
-瀏覽器測試需先 `npx playwright install chromium`；已有系統 Chromium 的雲端環境使用 `CHROMIUM_PATH=/usr/bin/chromium npm run test:cloud`。`npm run build:cloud` 啟用正式成績模式並產生學生與老師兩個頁面；`npm run build` 是本機練習模式。Access 及後端失效時，正式模式不會偷偷改成本機模式並宣稱已儲存。
+瀏覽器測試需先 `npx playwright install chromium`；已有系統 Chromium 的雲端環境使用 `CHROMIUM_PATH=/usr/bin/chromium npm run test:cloud`。`npm run build:cloud` 啟用正式成績模式並產生學生與老師兩個頁面；`npm run build` 是本機練習模式。登入及後端失效時，正式模式不會偷偷改成本機模式並宣稱已儲存。
 
 授權後使用 `npm run deploy:cloud -- --free-plan-confirmed`；部署工具不啟用付費方案，不寫入 Token 至檔案。設定草稿保存不代表已授權、已套用或已上線。
 

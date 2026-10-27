@@ -1,7 +1,6 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { validPasswordHash, verifyPassword } from "../src/password.js";
 import { validateBank, STAGES, matchingPairs } from "../src/core.js";
-const enc = new TextEncoder(),
-  keys = new Map();
+const enc = new TextEncoder();
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
     status,
@@ -45,6 +44,28 @@ function getCookie(req) {
       .find((x) => x.startsWith("eai_student="))
       ?.slice(12) || ""
   );
+}
+function teacherToken(req) {
+  return (
+    req.headers
+      .get("Cookie")
+      ?.split(";")
+      .map((x) => x.trim())
+      .find((x) => x.startsWith("eai_teacher="))
+      ?.slice(12) || ""
+  );
+}
+function teacherCookie(req, value, age) {
+  return `eai_teacher=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${new URL(req.url).protocol === "https:" ? "; Secure" : ""}`;
+}
+async function cleanupTeacherSessions(env) {
+  try {
+    await env.DB.prepare("DELETE FROM teacher_sessions WHERE expires_at<?")
+      .bind(Date.now())
+      .run();
+  } catch (e) {
+    if (!String(e.message).includes("no such table: teacher_sessions")) throw e;
+  }
 }
 async function body(req) {
   if (!req.headers.get("Content-Type")?.startsWith("application/json"))
@@ -295,7 +316,7 @@ async function report(env, classId) {
     );
   return { classes: summaries, students, leaderboard, generatedAt: Date.now() };
 }
-export function createHandler({ resolveAccessKey } = {}) {
+export function createHandler() {
   return async function handle(req, env) {
     try {
       const url = new URL(req.url),
@@ -312,43 +333,97 @@ export function createHandler({ resolveAccessKey } = {}) {
       }
       if (path === "/api/status" && method === "GET")
         return json({ cloud: true, teacherPath: "/teacher.html" });
+      if (path === "/api/teacher/config" && method === "GET")
+        return json({
+          configured: validPasswordHash(env.TEACHER_PASSWORD_HASH),
+          auth: "password",
+        });
+      if (path === "/api/teacher/login" && method === "POST") {
+        if (!validPasswordHash(env.TEACHER_PASSWORD_HASH))
+          fail(503, "請先在後端 Worker 設定 TEACHER_PASSWORD_HASH Secret。");
+        await rate(req, env, "teacher-login", 5);
+        const b = await body(req);
+        const email =
+          typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
+        const approved = (env.TEACHER_EMAILS || "")
+          .split(",")
+          .map((x) => x.trim().toLowerCase())
+          .filter(Boolean);
+        const matches = await verifyPassword(
+          b.password,
+          env.TEACHER_PASSWORD_HASH,
+        );
+        if (!matches || !approved.includes(email))
+          fail(401, "老師 Email 或密碼不正確。");
+        // Additive initialization only after a valid teacher password. Existing tables/data stay intact.
+        await env.DB.batch([
+          env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS teacher_sessions (token_hash TEXT PRIMARY KEY,email TEXT NOT NULL,auth_tag TEXT NOT NULL,expires_at INTEGER NOT NULL)",
+          ),
+          env.DB.prepare(
+            "CREATE INDEX IF NOT EXISTS teacher_sessions_expiry ON teacher_sessions(expires_at)",
+          ),
+        ]);
+        const token = random();
+        await env.DB.prepare(
+          "INSERT INTO teacher_sessions(token_hash,email,auth_tag,expires_at) VALUES(?,?,?,?)",
+        )
+          .bind(
+            await digest(token),
+            email,
+            await digest(env.TEACHER_PASSWORD_HASH),
+            Date.now() + 8 * 3600000,
+          )
+          .run();
+        return json({ ok: true }, 200, {
+          "Set-Cookie": teacherCookie(req, token, 8 * 3600),
+        });
+      }
+      if (path === "/api/teacher/logout" && method === "POST") {
+        const token = teacherToken(req);
+        if (/^[a-f0-9]{32}$/.test(token))
+          try {
+            await env.DB.prepare(
+              "DELETE FROM teacher_sessions WHERE token_hash=?",
+            )
+              .bind(await digest(token))
+              .run();
+          } catch (e) {
+            if (!String(e.message).includes("no such table: teacher_sessions"))
+              throw e;
+          }
+        return json({ ok: true }, 200, {
+          "Set-Cookie": teacherCookie(req, "", 0),
+        });
+      }
       let teacherEmail;
       if (path.startsWith("/api/admin/")) {
-        if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.TEACHER_EMAILS)
-          fail(503, "老師登入尚未設定 Cloudflare Access。");
-        const token = req.headers.get("Cf-Access-Jwt-Assertion");
-        if (!token) fail(401, "請使用 Cloudflare Access 登入老師管理頁。");
+        if (!validPasswordHash(env.TEACHER_PASSWORD_HASH))
+          fail(503, "老師密碼尚未設定，請先完成私下設定。");
+        const token = teacherToken(req);
+        if (!/^[a-f0-9]{32}$/.test(token)) fail(401, "請先登入老師帳號。");
+        let session;
         try {
-          const issuer = "https://" + env.ACCESS_TEAM_DOMAIN;
-          if (
-            !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(env.ACCESS_TEAM_DOMAIN)
+          session = await env.DB.prepare(
+            "SELECT email,auth_tag FROM teacher_sessions WHERE token_hash=? AND expires_at>?",
           )
-            throw Error();
-          let key = resolveAccessKey;
-          if (!key) {
-            if (!keys.has(issuer))
-              keys.set(
-                issuer,
-                createRemoteJWKSet(new URL(issuer + "/cdn-cgi/access/certs")),
-              );
-            key = keys.get(issuer);
-          }
-          const { payload } = await jwtVerify(token, key, {
-            issuer,
-            audience: env.ACCESS_AUD,
-            algorithms: ["RS256"],
-          });
-          teacherEmail = payload.email;
-          if (
-            typeof teacherEmail !== "string" ||
-            !env.TEACHER_EMAILS.split(",")
-              .map((x) => x.trim().toLowerCase())
-              .includes(teacherEmail.toLowerCase())
-          )
-            throw Error();
-        } catch {
-          fail(403, "登入身分無效或未獲授權。");
+            .bind(await digest(token), Date.now())
+            .first();
+        } catch (e) {
+          if (!String(e.message).includes("no such table: teacher_sessions"))
+            throw e;
         }
+        const approved = (env.TEACHER_EMAILS || "")
+          .split(",")
+          .map((x) => x.trim().toLowerCase())
+          .filter(Boolean);
+        if (
+          !session ||
+          session.auth_tag !== (await digest(env.TEACHER_PASSWORD_HASH)) ||
+          !approved.includes(session.email)
+        )
+          fail(401, "老師登入已失效，請重新登入。");
+        teacherEmail = session.email;
       }
       if (path === "/api/admin/me" && method === "GET")
         return json({ email: teacherEmail });
@@ -508,6 +583,7 @@ export function createHandler({ resolveAccessKey } = {}) {
             Date.now(),
           ),
         ]);
+        await cleanupTeacherSessions(env);
         return json({ ok: true });
       }
       if (path === "/api/student/login" && method === "POST") {
@@ -630,5 +706,6 @@ export default {
         Date.now(),
       ),
     ]);
+    await cleanupTeacherSessions(env);
   },
 };

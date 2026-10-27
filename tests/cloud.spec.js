@@ -7,14 +7,12 @@ test("teacher provisions class, student auto-saves all stages with retry, teache
 }, info) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.context().addCookies([
-    {
-      name: "eai_test_teacher",
-      value: "allow",
-      url: "http://127.0.0.1:4180",
-    },
-  ]);
   await page.goto("/teacher.html");
+  await page.getByLabel("Email", { exact: true }).fill("g9641723@gmail.com");
+  await page
+    .getByLabel("密碼", { exact: true })
+    .fill("Local test password only 2026!");
+  await page.getByRole("button", { name: "登入成績管理" }).click();
   await expect(
     page.getByRole("heading", { name: "看見每一位冒險家的成長。" }),
   ).toBeVisible();
@@ -112,6 +110,11 @@ test("teacher provisions class, student auto-saves all stages with retry, teache
     path: `artifacts/teacher-${info.project.name}.png`,
     fullPage: true,
   });
+  await page.getByRole("button", { name: "登出", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "老師登入", exact: true }),
+  ).toBeVisible();
+  expect((await page.request.get("/api/admin/report")).status()).toBe(401);
   expect(errors).toEqual([]);
 });
 test("student cannot open teacher data or publish bank", async ({ page }) => {
@@ -139,9 +142,7 @@ test("student cannot open teacher data or publish bank", async ({ page }) => {
   await expect(page.locator("#player-name")).toHaveText("冒險家");
   await expect(page.locator(".crystal-count b")).toHaveText("0");
   await page.goto("/teacher.html");
-  await expect(
-    page.getByRole("heading", { name: "老師管理頁受到保護" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "老師登入" })).toBeVisible();
   expect(
     (
       await page.request.post("/api/admin/banks", {
@@ -150,4 +151,28 @@ test("student cannot open teacher data or publish bank", async ({ page }) => {
       })
     ).status(),
   ).toBe(401);
+});
+
+test("password setup derives locally without sending credentials", async ({
+  page,
+}) => {
+  await page.goto("/teacher-password.html");
+  const outgoing = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST") outgoing.push(r.url());
+  });
+  await page
+    .getByLabel("自訂密碼（至少 14 字元）")
+    .fill("Only local password example 2026!");
+  await page
+    .getByLabel("再次輸入密碼")
+    .fill("Only local password example 2026!");
+  await page.getByRole("button", { name: "產生私密設定值" }).click();
+  await expect(page.locator("#secret-value")).toHaveValue(
+    /^pbkdf2-sha256\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/,
+  );
+  expect(outgoing).toEqual([]);
+  await expect(page.locator("#new-password")).toHaveValue("");
+  await page.getByRole("button", { name: "清除本頁私密設定值" }).click();
+  await expect(page.locator("#secret-value")).toHaveValue("");
 });

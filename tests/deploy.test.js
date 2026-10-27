@@ -26,31 +26,27 @@ test("deployment requires explicit Free confirmation and injected credentials", 
     /格式/,
   );
 });
-test("deployment stops before writes without Zero Trust or OTP", async () => {
-  const paths = [];
+test("deployment refuses an existing untracked project before altering resources", async () => {
+  const calls = [];
   await assert.rejects(
     provision(config, {
-      api: async (p, o) => {
-        paths.push([p, o]);
-        return {};
+      api: async (p) => {
+        calls.push(p);
+        return { subdomain: "existing.pages.dev" };
       },
       save: async () => {},
       run: async () => {},
     }),
-    /Zero Trust/,
+    /同名 Pages/,
   );
-  assert.equal(paths.length, 1);
+  assert.equal(calls.length, 1);
 });
-test("provisioning binds private Worker, D1, teacher-only Access, and executes ordered migrations/deploy", async () => {
+test("provisioning binds private Worker and D1 without Access or billing APIs", async () => {
   const calls = [],
     steps = [],
     saves = [];
   const api = async (path, options = {}) => {
     calls.push([path, options]);
-    if (path.endsWith("/organizations"))
-      return { auth_domain: "school.cloudflareaccess.com" };
-    if (path.endsWith("/identity_providers"))
-      return [{ id: "otp", type: "onetimepin" }];
     if (path.endsWith("/pages/projects/test-island")) {
       const e = Error();
       e.status = 404;
@@ -60,8 +56,6 @@ test("provisioning binds private Worker, D1, teacher-only Access, and executes o
       return { subdomain: "test-island.pages.dev" };
     if (path.includes("/d1/database?")) return [];
     if (path.endsWith("/d1/database")) return { uuid: "db-id" };
-    if (path.endsWith("/access/apps")) return { id: "access-id", aud: "aud" };
-    if (path.endsWith("/policies")) return { id: "policy-id" };
     throw Error("Unexpected API " + path);
   };
   const r = await provision(config, {
@@ -79,11 +73,9 @@ test("provisioning binds private Worker, D1, teacher-only Access, and executes o
     steps[0][1].workerConfig.vars.APP_ORIGINS,
     "https://test-island.pages.dev",
   );
-  const policy = JSON.parse(
-    calls.find(([p]) => p.endsWith("/policies"))[1].body,
-  );
-  assert.equal(policy.include[0].email.email, config.email);
-  assert(!calls.some(([p]) => /billing|subscriptions/.test(p)));
+  assert.equal(steps[0][1].workerConfig.vars.TEACHER_EMAILS, config.email);
+  assert(!calls.some(([p]) => /billing|subscriptions|access\//.test(p)));
+  assert.equal(steps[0][1].workerConfig.vars.TEACHER_PASSWORD_HASH, undefined);
   assert.equal(r.teacherUrl, "https://test-island.pages.dev/teacher.html");
   assert(saves.every((s) => !JSON.stringify(s).includes(config.token)));
 });

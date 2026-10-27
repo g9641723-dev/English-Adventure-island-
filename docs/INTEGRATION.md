@@ -1,12 +1,12 @@
 # Cloudflare 成績系統
 
-正式版只使用 Cloudflare Pages、Workers、D1 及 Access。不使用 Google Apps Script、Google 試算表或其他成績儲存服務。
+正式版只使用 Cloudflare Pages、Workers 及 D1。不使用 Google Apps Script、Google 試算表或其他成績儲存服務。
 
 ## 架構與權限
 
 - Pages 提供遊戲 `/` 和老師介面 `/teacher.html`。
 - Pages Functions 僅轉送 `/api/*`，透過私有 Service Binding 呼叫 `english-island-api` Worker；Worker 關閉 `workers.dev` 與公開版本預覽。
-- 老師透過 Cloudflare Access Email One-time PIN 登入。Access 保護 `/teacher.html` 與 `/api/admin/*`；Worker 再驗證 JWT 簽章、issuer、audience、有效期及老師 Email 允許名單。前端隱藏按鈕不是權限保護。
+- 老師以允許的 Email 與自訂密碼登入；Worker 驗證 Secret 中的加鹽 PBKDF2 雜湊，建立 D1 儲存的伺服器 Session，所有 `/api/admin/*` 都驗證 Session、有效期、憑證版本與 Email 名單。無需 Zero Trust。設定方法見 `docs/TEACHER_LOGIN.md`。
 - 學生使用班級、座號及老師個別發放的 128-bit 隨機入場碼。D1 只儲存碼的 SHA-256，Session Token 也只儲存雜湊；瀏覽器使用 HttpOnly、SameSite=Strict Cookie，正式 HTTPS 使用 Secure。
 - 學生 API 只依 session 對應自身學生 ID，不接受可指定其他學生的成績查詢或更新。老師排行榜不對學生公開。
 - 所有修改 API 檢查 Origin，使用 SQL 綁定參數及輸入驗證。登入採每 IP 及每學生的限流，不把原始 IP 保存到 D1。
@@ -34,3 +34,5 @@
 `worker/migrations/0001_schema.sql` 建立題庫、班級、學生名冊、作業、各關成績、session 與限流資料表。`0002_demo.sql` 插入原有示範題。所有資源只在使用者授權後建立於其 Cloudflare 帳戶。
 
 每日排程清理過期 session 與限流資料，不自動刪除學生成績。長期使用須定期匯出與依校方規定刪除不再需要的班級資料；不要把個別入場碼上傳至 Git。
+
+老師 Session 表由 `0003_teacher_sessions.sql` 定義，亦會在首次正確老師登入時以 IF NOT EXISTS 自動建立，不需重跑既有 schema migration；密碼雜湊只在 Worker Secret，不進入 D1。每日清理也會刪除過期老師 Session。

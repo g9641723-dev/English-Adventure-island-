@@ -124,3 +124,25 @@ th {
     width: 60%;
   }
 }
+.teacher-card textarea {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #cdd9c4;
+  border-radius: 8px;
+  font: 13px monospace;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
+.teacher-card #secret-output {
+  margin-top: 25px;
+}
+.teacher-card li {
+  line-height: 1.9;
+}
+#teacher-login-status,
+#setup-status {
+  color: #85663e;
+  white-space: pre-wrap;
+}

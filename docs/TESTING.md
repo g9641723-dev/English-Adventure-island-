@@ -46,3 +46,10 @@
 - 老師頁截圖位於忽略 Git 的 `artifacts/teacher-desktop.png`、`teacher-tablet.png`、`teacher-mobile.png`；使用虛構測試班級，不包含真實學生資料。
 
 Cloudflare Access 的 JWT 使用本機測試專用產生的簽章及公鑰驗證；測試 fixture 不會部署。尚未驗證老師真實 Email OTP、遠端 D1、Access 邊緣政策、公開網址或 Cloudflare 實際免費用量。這些需要使用者授權並確認 Free 方案後執行。沒有 Windows／iOS 實機測試，也不宣稱正式考試防作弊。
+
+
+## 不綁卡老師帳密登入版本
+
+本次移除 Access／JWT 認證依賴，改測真實 PBKDF2 密碼驗證、Email 允許名單、D1 伺服器 Session、登出／到期／憑證版本失效、猜密碼限流與學生隔離。密碼產生頁只在瀏覽器計算，測試確認沒有送出 POST，也不保存原始密碼。新 schema 只新增 teacher_sessions 表與索引，不改既有班級或成績。實際測試結果見本次交付；先前 Access 測試為歷史紀錄，不能作為新版登入已驗證的證據。
+
+最新驗證結果：`npm test` 24 項通過；`npm run build:cloud` 三個 HTML 入口成功；`npm run test:cloud` 9 項跨尺寸情境通過，含真正密碼登入／建班／五關／CSV／登出，以及私密設定值在本機產生且沒有 POST。尚未使用使用者真正的老師 Secret 做線上登入，需由使用者私下設定後驗收。
