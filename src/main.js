@@ -44,6 +44,7 @@ let state = saved ?? {
 };
 let cloudMode = import.meta.env.VITE_CLOUD_MODE === "true",
   cloudUser = null,
+  requiresStudentCode = true,
   cloudPicks = {},
   cloudPairs = [],
   cloudQueue = {},
@@ -512,6 +513,12 @@ const cloudReady = cloudAvailable().then(async (enabled) => {
   cloudMode = enabled;
   if (enabled) {
     try {
+      requiresStudentCode =
+        (await api("status")).studentLoginMode !== "class-seat";
+    } catch {
+      /* Default to code-required when configuration cannot be read. */
+    }
+    try {
       await restoreCloud(await api("student/me"));
     } catch (e) {
       cloudUser = null;
@@ -586,7 +593,9 @@ function updateCloudStatus(text) {
   node.textContent =
     text ||
     (!cloudUser
-      ? "雲端成績模式：請先輸入班級、座號及個別入場碼。"
+      ? requiresStudentCode
+        ? "雲端成績模式：請先輸入班級、座號及個別入場碼。"
+        : "簡易登入：輸入班級與座號即可開始。請只使用自己的座號。"
       : Object.keys(cloudQueue).length
         ? `${state.nickname} · 有 ${Object.keys(cloudQueue).length} 關等待同步，請保持此分頁開啟。`
         : `${state.nickname} · 已儲存 ${cloudUser.progress.completedStages.length} 關至 Cloudflare D1`);
@@ -616,7 +625,7 @@ async function syncCloud() {
 }
 function studentLogin(after) {
   show(
-    `<div class="eyebrow">CLASSROOM ADVENTURE</div><h2>${cloudUser ? "學生帳號" : "輸入班級與座號，開始冒險"}</h2><p>使用老師個別發給你的入場碼，請勿分享；不需要真實姓名。關卡完成後會自動儲存至 Cloudflare。</p>${cloudUser ? `<p>目前：${esc(state.nickname)}</p><button id="student-logout" class="secondary">登出並切換學生</button>` : `<form id="student-login"><label for="student-class">班級</label><input id="student-class" required maxlength="30" placeholder="例如：701" autocomplete="off"><label for="student-seat">座號</label><input id="student-seat" required type="number" min="1" max="100"><label for="student-code">個別入場碼</label><input id="student-code" required type="password" maxlength="32" autocomplete="off"><button class="primary">登入並開始冒險 →</button></form>`}<p id="login-status" role="status"></p>`,
+    `<div class="eyebrow">CLASSROOM ADVENTURE</div><h2>${cloudUser ? "學生帳號" : "輸入班級與座號，開始冒險"}</h2><p>${requiresStudentCode ? "使用老師個別發給你的入場碼，請勿分享；不需要真實姓名。" : "只需輸入老師建立的班級及自己的座號，不需要入場碼。簡易登入不驗證身分，請勿冒用同學座號。"}關卡完成後會自動儲存。</p>${cloudUser ? `<p>目前：${esc(state.nickname)}</p><button id="student-logout" class="secondary">登出並切換學生</button>` : `<form id="student-login"><label for="student-class">班級</label><input id="student-class" required maxlength="30" placeholder="例如：701" autocomplete="off"><label for="student-seat">座號</label><input id="student-seat" required type="number" min="1" max="100">${requiresStudentCode ? '<label for="student-code">個別入場碼</label><input id="student-code" required type="password" maxlength="32" autocomplete="off">' : ""}<button class="primary">登入並開始冒險 →</button></form>`}<p id="login-status" role="status"></p>`,
   );
   if (cloudUser) {
     $("#student-logout").onclick = async () => {
@@ -651,7 +660,9 @@ function studentLogin(after) {
       await post("student/login", {
         className: $("#student-class").value.trim(),
         seat: Number($("#student-seat").value),
-        entryCode: $("#student-code").value.trim(),
+        ...(requiresStudentCode
+          ? { entryCode: $("#student-code").value.trim() }
+          : {}),
       });
       await restoreCloud(await api("student/me"));
       $("#modal").close();
@@ -672,7 +683,7 @@ function ownCloudResult() {
   }
   const p = cloudUser.progress;
   show(
-    `<div class="eyebrow">MY CLOUD RESULTS</div><h2>${esc(state.nickname)} 的成績</h2><p>以下為伺服器已確認紀錄，不包含尚未同步的關卡。</p><p>得分：${p.score} / ${p.maxScore}<br>答對：${p.correctCount} / ${p.questionCount}<br>正確率：${p.accuracy}%<br>完成關卡：${p.completedStages.length} / ${p.totalStages}<br>完成時間：${p.completedAt ? new Date(p.completedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }) : "尚未全部完成"}<br>經過時間：${p.elapsedSeconds} 秒</p><p class="mode-note">不提供其他學生的成績查詢。老師排行榜請至受保護的管理頁。</p>`,
+    `<div class="eyebrow">MY CLOUD RESULTS</div><h2>${esc(state.nickname)} 的成績</h2><p>以下為伺服器已確認紀錄，不包含尚未同步的關卡。</p><p>得分：${p.score} / ${p.maxScore}<br>答對：${p.correctCount} / ${p.questionCount}<br>正確率：${p.accuracy}%<br>完成關卡：${p.completedStages.length} / ${p.totalStages}<br>完成時間：${p.completedAt ? new Date(p.completedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }) : "尚未全部完成"}<br>經過時間：${p.elapsedSeconds} 秒</p><p class="mode-note">${requiresStudentCode ? "不提供其他學生的成績查詢。" : "簡易登入不驗證身分，知道班級與座號的人可能讀取或續作該座號進度。請只使用自己的座號。"}老師排行榜請至受保護的管理頁。</p>`,
   );
 }
 window.addEventListener("online", () => {

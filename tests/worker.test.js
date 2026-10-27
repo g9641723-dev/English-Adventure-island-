@@ -433,3 +433,99 @@ test("missing or malformed teacher Secret fails closed without a bootstrap regis
     );
   }
 });
+
+test("simple class-seat login needs no code and preserves grades across fresh sessions", async () => {
+  const { createHandler } = await import("../worker/index.js");
+  const handle = createHandler();
+  const env = {
+    DB: db,
+    APP_ORIGINS: origin,
+    TEACHER_EMAILS: "teacher@example.test",
+    TEACHER_PASSWORD_HASH: passwordHash,
+    STUDENT_LOGIN_MODE: "class-seat",
+  };
+  const simple = (path, { method = "GET", data, cookie } = {}) =>
+    handle(
+      new Request(origin + path, {
+        method,
+        headers: {
+          Origin: origin,
+          ...(data ? { "Content-Type": "application/json" } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        ...(data ? { body: JSON.stringify(data) } : {}),
+      }),
+      env,
+    );
+  assert.equal(
+    (await (await simple("/api/status")).json()).studentLoginMode,
+    "class-seat",
+  );
+  const created = await simple("/api/admin/classes", {
+    method: "POST",
+    cookie: teacherSession,
+    data: { name: "SIMPLE-701", seats: 2 },
+  });
+  assert.equal(created.status, 201);
+  const klass = await created.json();
+  assert.equal(klass.studentLoginMode, "class-seat");
+  assert.deepEqual(klass.roster, [{ seat: 1 }, { seat: 2 }]);
+  const enter = async () => {
+    const r = await simple("/api/student/login", {
+      method: "POST",
+      data: { className: klass.name, seat: 1 },
+    });
+    assert.equal(r.status, 200);
+    return r.headers.get("Set-Cookie").split(";")[0];
+  };
+  const cookie = await enter();
+  const initial = await (await simple("/api/student/me", { cookie })).json();
+  assert.equal(initial.seat, 1);
+  assert.equal(initial.progress.score, 0);
+  const saved = await simple("/api/student/stages/vocabulary", {
+    method: "POST",
+    cookie,
+    data: { answers: { v1: 0, v2: 1, v3: 2 } },
+  });
+  assert.equal((await saved.json()).progress.score, 30);
+  assert.equal((await simple("/api/admin/report", { cookie })).status, 401);
+  await simple("/api/student/logout", { method: "POST", cookie, data: {} });
+  assert.equal((await simple("/api/student/me", { cookie })).status, 401);
+  const next = await enter();
+  const restored = await (
+    await simple("/api/student/me", { cookie: next })
+  ).json();
+  assert.equal(restored.progress.score, 30);
+  assert.equal(restored.progress.runId, initial.progress.runId);
+  for (const data of [
+    { className: "unknown", seat: 1 },
+    { className: klass.name, seat: 3 },
+    { className: klass.name, seat: 0 },
+  ])
+    assert.equal(
+      (await simple("/api/student/login", { method: "POST", data })).status,
+      401,
+    );
+  assert.equal(
+    (
+      await simple(`/api/admin/classes/${klass.id}/students/1/code`, {
+        method: "POST",
+        cookie: teacherSession,
+        data: {},
+      })
+    ).status,
+    400,
+  );
+});
+test("clients cannot bypass code mode merely by requesting simplified login", async () => {
+  const c = await makeClass("CODE-MODE-ONLY", 1);
+  assert.equal(
+    (
+      await call("/api/student/login", {
+        method: "POST",
+        body: { className: c.name, seat: 1, studentLoginMode: "class-seat" },
+      })
+    ).status,
+    401,
+  );
+});

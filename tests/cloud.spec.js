@@ -22,10 +22,11 @@ test("teacher provisions class, student auto-saves all stages with retry, teache
   await page.getByRole("button", { name: "建立班級", exact: true }).click();
   await expect(page.locator("#roster-output")).toContainText("2 位學生");
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "下載此班入場碼 CSV" }).click();
+  await page.getByRole("button", { name: "下載班級名冊 CSV" }).click();
   const download = await downloadPromise;
   const text = await readFile(await download.path(), "utf8");
-  const code = text.match(/"1","([a-f0-9]{32})"/)[1];
+  expect(text).toContain(name);
+  expect(text).not.toContain("入場碼");
   const context = await browser.newContext({
     viewport: info.project.use.viewport,
   });
@@ -35,7 +36,7 @@ test("teacher provisions class, student auto-saves all stages with retry, teache
   await student.getByRole("button", { name: "開始我的冒險" }).click();
   await student.getByLabel("班級", { exact: true }).fill(name);
   await student.getByLabel("座號", { exact: true }).fill("1");
-  await student.getByLabel("個別入場碼", { exact: true }).fill(code);
+  await expect(student.locator("#student-code")).toHaveCount(0);
   await student.getByRole("button", { name: "登入並開始冒險" }).click();
   await expect(student.locator(".prompt")).toBeVisible();
   expect(

@@ -27,6 +27,7 @@ const mf = new Miniflare({
     APP_ORIGINS: origin,
     TEACHER_PASSWORD_HASH: passwordHash,
     TEACHER_EMAILS: "g9641723@gmail.com",
+    STUDENT_LOGIN_MODE: "class-seat",
   },
 });
 const db = await mf.getD1Database("DB");

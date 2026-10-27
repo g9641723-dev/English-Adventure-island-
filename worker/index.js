@@ -316,6 +316,9 @@ async function report(env, classId) {
     );
   return { classes: summaries, students, leaderboard, generatedAt: Date.now() };
 }
+function studentLoginMode(env) {
+  return env.STUDENT_LOGIN_MODE === "class-seat" ? "class-seat" : "entry-code";
+}
 export function createHandler() {
   return async function handle(req, env) {
     try {
@@ -332,7 +335,11 @@ export function createHandler() {
           fail(403, "來源不符，請由正式遊戲網址操作。");
       }
       if (path === "/api/status" && method === "GET")
-        return json({ cloud: true, teacherPath: "/teacher.html" });
+        return json({
+          cloud: true,
+          teacherPath: "/teacher.html",
+          studentLoginMode: studentLoginMode(env),
+        });
       if (path === "/api/teacher/config" && method === "GET")
         return json({
           configured: validPasswordHash(env.TEACHER_PASSWORD_HASH),
@@ -426,7 +433,10 @@ export function createHandler() {
         teacherEmail = session.email;
       }
       if (path === "/api/admin/me" && method === "GET")
-        return json({ email: teacherEmail });
+        return json({
+          email: teacherEmail,
+          studentLoginMode: studentLoginMode(env),
+        });
       if (path === "/api/admin/banks" && method === "GET")
         return json(
           (
@@ -498,12 +508,25 @@ export function createHandler() {
           }
         }
         await env.DB.batch(inserts);
-        return json({ id, name: b.name.trim(), roster }, 201);
+        return json(
+          {
+            id,
+            name: b.name.trim(),
+            roster:
+              studentLoginMode(env) === "class-seat"
+                ? roster.map(({ seat }) => ({ seat }))
+                : roster,
+            studentLoginMode: studentLoginMode(env),
+          },
+          201,
+        );
       }
       const rotate = path.match(
         /^\/api\/admin\/classes\/([a-f0-9]{32})\/students\/(\d+)\/code$/,
       );
       if (rotate && method === "POST") {
+        if (studentLoginMode(env) === "class-seat")
+          fail(400, "目前只需班級與座號，不使用入場碼。");
         const s = await env.DB.prepare(
           "SELECT id FROM students WHERE class_id=? AND seat=?",
         )
@@ -589,28 +612,35 @@ export function createHandler() {
       if (path === "/api/student/login" && method === "POST") {
         await rate(req, env, "login-ip", 600);
         const b = await body(req);
+        const requiresCode = studentLoginMode(env) !== "class-seat";
+        const loginError = requiresCode
+          ? "班級、座號或入場碼不正確。"
+          : "班級或座號不正確，請確認老師已建立此班級與座號。";
         if (
           typeof b.className !== "string" ||
           b.className.length > 30 ||
           !Number.isInteger(b.seat) ||
           b.seat < 1 ||
           b.seat > 100 ||
-          typeof b.entryCode !== "string" ||
-          !/^[a-f0-9]{32}$/.test(b.entryCode)
+          (requiresCode &&
+            (typeof b.entryCode !== "string" ||
+              !/^[a-f0-9]{32}$/.test(b.entryCode)))
         )
-          fail(401, "班級、座號或入場碼不正確。");
+          fail(401, loginError);
         await rate(
           req,
           env,
           "login-seat:" + (await digest(b.className.trim() + ":" + b.seat)),
           8,
         );
-        const s = await env.DB.prepare(
-          "SELECT s.*,c.bank_id,c.name AS class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE c.name=? AND s.seat=? AND s.entry_hash=?",
-        )
-          .bind(b.className.trim(), b.seat, await digest(b.entryCode))
-          .first();
-        if (!s) fail(401, "班級、座號或入場碼不正確。");
+        const query = env.DB.prepare(
+          "SELECT s.*,c.bank_id,c.name AS class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE c.name=? AND s.seat=?" +
+            (requiresCode ? " AND s.entry_hash=?" : ""),
+        );
+        const parameters = [b.className.trim(), b.seat];
+        if (requiresCode) parameters.push(await digest(b.entryCode));
+        const s = await query.bind(...parameters).first();
+        if (!s) fail(401, loginError);
         const token = random();
         await env.DB.batch([
           env.DB.prepare(

@@ -7,8 +7,8 @@
 - Pages 提供遊戲 `/` 和老師介面 `/teacher.html`。
 - Pages Functions 僅轉送 `/api/*`，透過私有 Service Binding 呼叫 `english-island-api` Worker；Worker 關閉 `workers.dev` 與公開版本預覽。
 - 老師以允許的 Email 與自訂密碼登入；Worker 驗證 Secret 中的加鹽 PBKDF2 雜湊，建立 D1 儲存的伺服器 Session，所有 `/api/admin/*` 都驗證 Session、有效期、憑證版本與 Email 名單。無需 Zero Trust。設定方法見 `docs/TEACHER_LOGIN.md`。
-- 學生使用班級、座號及老師個別發放的 128-bit 隨機入場碼。D1 只儲存碼的 SHA-256，Session Token 也只儲存雜湊；瀏覽器使用 HttpOnly、SameSite=Strict Cookie，正式 HTTPS 使用 Secure。
-- 學生 API 只依 session 對應自身學生 ID，不接受可指定其他學生的成績查詢或更新。老師排行榜不對學生公開。
+- 目前學生使用班級＋座號的簡易登入（STUDENT_LOGIN_MODE=class-seat），不再要求入場碼。伺服器仍建立 Session，Token 只存雜湊，Cookie 使用 HttpOnly／SameSite=Strict，正式 HTTPS 使用 Secure。但班級與座號不是秘密，任何知道該組合的人都可能取得該座號的 Session、查看或續作其進度；此模式僅供練習。
+- 學生 API 依 Session 綁定的座號讀寫，不接受透過請求中的 studentId 覆寫其他紀錄；不提供公開全班名冊與老師排行榜。簡易登入的 Session 只能代表使用者宣稱的座號，不能當作本人驗證。
 - 所有修改 API 檢查 Origin，使用 SQL 綁定參數及輸入驗證。登入採每 IP 及每學生的限流，不把原始 IP 保存到 D1。
 
 ## 成績定義
@@ -25,9 +25,9 @@
 
 每關完成自動送出，只有伺服器確認後顯示已保存。失敗會明確顯示尚未儲存，保留本分頁 sessionStorage 待送資料，支援重新整理、手動重試與網路恢復後重試。重新登入同一作業可恢復暫存；關閉分頁、清除網站資料或儲存遭限制可能遺失未同步內容，請確認已保存再離開。
 
-正式雲端模式不使用舊本機排行榜或多學生 localStorage 紀錄；學生應在共用裝置操作結束後登出。入場碼遺失可由老師重設，舊碼與先前 session 立即失效，既有成績保留。
+正式雲端模式不使用舊本機排行榜或多學生 localStorage 紀錄；學生應在共用裝置操作結束後登出。目前簡易登入不需要發碼或重設入場碼；若日後恢復 entry-code 模式，原有重設功能仍可使用。
 
-這是課堂練習系統。答案必須提供給裝置才能即時解析，不能宣稱具正式考試防作弊保證；入場碼被轉交也可能被冒用。老師需個別發碼、妥善保管 CSV，遵循學校資料保存規則。
+這是課堂練習系統。答案必須提供給裝置才能即時解析，不能宣稱具正式考試防作弊保證；簡易登入亦無法防止冒用座號。老師需提醒學生只用本人座號、妥善保管成績 CSV，遵循學校資料保存規則。
 
 ## 資料結構
 

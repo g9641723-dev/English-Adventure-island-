@@ -65,3 +65,7 @@ Pages 靜態資源不進入 API Worker；只有 `/api/*` 透過 Pages Functions 
 在 Pages 的 Settings → Build configuration 設定 Build command 為 `npm run build:cloud`、Build output directory 為 `dist`，Root directory 保持預設；Production branch 使用 `feature/cloudflare-classroom`。若建置命令與輸出目錄空白，並不會自動產生本遊戲需要的 dist 產物。
 
 保存設定後，推送新的分支提交或對正確分支的既有紀錄執行 Retry deployment，再觀察新建置；設定保存不會把先前的失敗紀錄變成成功。成功前，Production 可能顯示 No production deployment yet。若再次失敗，以該筆 Details 中的實際錯誤診斷，不重建資料庫或改動已成功的私有 API Worker。
+
+## 學生簡易登入
+
+目前 `worker/wrangler.jsonc` 宣告 `STUDENT_LOGIN_MODE=class-seat`，Git 部署後學生只需班級＋座號。既有 D1 不需 migration、班級不需重建、老師 Secret 不需更動。此設定是使用者已選擇的練習模式，無法防冒用座號；若要恢復入場碼，維護者可改為 entry-code 後部署，教師頁會重新提供發碼工具。未設定或不認得的模式預設維持入場碼驗證，前端不能自行降低驗證要求。

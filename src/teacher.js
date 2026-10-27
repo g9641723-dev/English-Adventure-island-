@@ -15,6 +15,7 @@ const app = document.querySelector("#teacher-app"),
           "'": "&#39;",
         })[c],
     );
+let simpleStudentLogin = false;
 let report = null,
   roster = null,
   banks = [],
@@ -59,8 +60,9 @@ async function start() {
     '<main class="teacher-shell"><h1>老師成績管理</h1><p role="status">正在確認老師登入狀態…</p></main>';
   try {
     const me = await api("admin/me");
+    simpleStudentLogin = me.studentLoginMode === "class-seat";
     banks = await api("admin/banks");
-    app.innerHTML = `<header class="topbar"><a class="brand" href="/">✧ ENGLISH ADVENTURE ISLAND</a><nav><span>${esc(me.email)}</span><button id="teacher-logout" class="quiet">登出</button></nav></header><main class="teacher-shell"><div class="eyebrow">TEACHER’S OBSERVATORY</div><h1>看見每一位冒險家的成長。</h1><p>僅授權老師可讀取；時間以台灣時間顯示。成績由 Cloudflare Workers 計算並保存於 D1。</p><p id="admin-status" role="status"></p><section class="teacher-card"><h2>班級與成績</h2><div class="toolbar"><label>篩選班級<select id="class-filter"><option value="">全部班級</option></select></label><button id="refresh" class="secondary">重新整理</button><a id="export-csv" class="primary" href="/api/admin/export.csv">下載 CSV 成績</a></div><div id="summary"></div><p class="mode-note">平均分數以已開始學生計算（含未完成）；完成率以全班名冊人數為分母。配對正確率包含所有配對嘗試，重練不改寫首次成績。</p><div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>分數／滿分</th><th>答對／作答</th><th>正確率</th><th>完成關卡</th><th>完成時間</th><th>經過時間</th></tr></thead><tbody id="results"></tbody></table></div><h3>排行榜</h3><p class="mode-note">先按得分比例、再按分數；同分時完成者優先、完成耗時短者優先。只供老師查看，不公開學生紀錄。</p><ol id="board" class="leaderboard"></ol></section><section class="teacher-card"><h2>建立班級與學生入場碼</h2><p>名冊依 1 到指定人數建立。每位學生有獨立入場碼，只顯示這一次；請立即下載，個別發給學生，不要公開整份名冊。</p><form id="create-class"><label>班級名稱<input id="class-name" required maxlength="30" placeholder="例如：701"></label><label>學生人數<input id="seat-count" type="number" min="1" max="100" value="30" required></label><label>指定題庫<select id="bank-select">${banks.map((b) => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join("")}</select></label><button class="primary">建立班級</button></form><div id="roster-output"></div></section><section class="teacher-card"><h2>發布教師題庫</h2><p>上傳 JSON／CSV，先驗證再發布。題庫保存為不可變版本，新增班級時選取；既有班級題庫不會被覆蓋。</p><label>題庫名稱<input id="bank-title" maxlength="80" placeholder="例如：七上 Unit 1"></label><label>選擇題庫<input id="bank-upload" type="file" accept=".json,.csv"></label><p id="bank-preview" role="status"></p><button id="publish-bank" class="primary" disabled>確認發布題庫</button></section><section class="teacher-card"><h2>遺失入場碼</h2><p>重設會立即使該學生先前登入失效，保留已儲存成績；新碼只顯示一次。</p><form id="rotate-code"><label>班級<select id="rotate-class"></select></label><label>座號<input id="rotate-seat" type="number" min="1" max="100" required></label><button class="secondary">重設此學生入場碼</button></form><p id="new-code" role="status"></p></section><p class="mode-note">練習型遊戲：題目與答案會送到學生裝置，不提供正式考試的防作弊保證。請依學校政策保管成績與名冊。</p></main>`;
+    app.innerHTML = `<header class="topbar"><a class="brand" href="/">✧ ENGLISH ADVENTURE ISLAND</a><nav><span>${esc(me.email)}</span><button id="teacher-logout" class="quiet">登出</button></nav></header><main class="teacher-shell"><div class="eyebrow">TEACHER’S OBSERVATORY</div><h1>看見每一位冒險家的成長。</h1><p>僅授權老師可讀取；時間以台灣時間顯示。成績由 Cloudflare Workers 計算並保存於 D1。</p>${simpleStudentLogin ? '<p class="class-summary">學生使用簡易登入：只需班級＋座號，不用發入場碼。此模式不驗證學生身分，可能被冒用，不適合正式測驗。</p>' : ""}<p id="admin-status" role="status"></p><section class="teacher-card"><h2>班級與成績</h2><div class="toolbar"><label>篩選班級<select id="class-filter"><option value="">全部班級</option></select></label><button id="refresh" class="secondary">重新整理</button><a id="export-csv" class="primary" href="/api/admin/export.csv">下載 CSV 成績</a></div><div id="summary"></div><p class="mode-note">平均分數以已開始學生計算（含未完成）；完成率以全班名冊人數為分母。配對正確率包含所有配對嘗試，重練不改寫首次成績。</p><div class="table-wrap"><table><thead><tr><th>班級</th><th>座號</th><th>分數／滿分</th><th>答對／作答</th><th>正確率</th><th>完成關卡</th><th>完成時間</th><th>經過時間</th></tr></thead><tbody id="results"></tbody></table></div><h3>排行榜</h3><p class="mode-note">先按得分比例、再按分數；同分時完成者優先、完成耗時短者優先。只供老師查看，不公開學生紀錄。</p><ol id="board" class="leaderboard"></ol></section><section class="teacher-card"><h2>${simpleStudentLogin ? "建立班級" : "建立班級與學生入場碼"}</h2><p>${simpleStudentLogin ? "名冊依 1 到指定人數建立。建立後學生只需輸入班級與座號即可開始，不需要入場碼。" : "名冊依 1 到指定人數建立。每位學生有獨立入場碼，只顯示這一次；請立即下載，個別發給學生，不要公開整份名冊。"}</p><form id="create-class"><label>班級名稱<input id="class-name" required maxlength="30" placeholder="例如：701"></label><label>學生人數<input id="seat-count" type="number" min="1" max="100" value="30" required></label><label>指定題庫<select id="bank-select">${banks.map((b) => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join("")}</select></label><button class="primary">建立班級</button></form><div id="roster-output"></div></section><section class="teacher-card"><h2>發布教師題庫</h2><p>上傳 JSON／CSV，先驗證再發布。題庫保存為不可變版本，新增班級時選取；既有班級題庫不會被覆蓋。</p><label>題庫名稱<input id="bank-title" maxlength="80" placeholder="例如：七上 Unit 1"></label><label>選擇題庫<input id="bank-upload" type="file" accept=".json,.csv"></label><p id="bank-preview" role="status"></p><button id="publish-bank" class="primary" disabled>確認發布題庫</button></section>${simpleStudentLogin ? "" : `<section class="teacher-card"><h2>遺失入場碼</h2><p>重設會立即使該學生先前登入失效，保留已儲存成績；新碼只顯示一次。</p><form id="rotate-code"><label>班級<select id="rotate-class"></select></label><label>座號<input id="rotate-seat" type="number" min="1" max="100" required></label><button class="secondary">重設此學生入場碼</button></form><p id="new-code" role="status"></p></section>`}<p class="mode-note">練習型遊戲：題目與答案會送到學生裝置，不提供正式考試的防作弊保證。請依學校政策保管成績與名冊。</p></main>`;
     document.querySelector("#teacher-logout").onclick = async () => {
       try {
         await post("teacher/logout", {});
@@ -86,20 +88,30 @@ async function start() {
         });
         roster = data;
         document.querySelector("#roster-output").innerHTML =
-          `<p>已建立 ${esc(data.name)}：${data.roster.length} 位學生。請立即下載入場碼。</p><button id="download-roster" class="secondary">下載此班入場碼 CSV</button>`;
+          `<p>已建立 ${esc(data.name)}：${data.roster.length} 位學生。${simpleStudentLogin ? "直接告訴學生班級與座號即可登入。" : "請立即下載入場碼。"}</p><button id="download-roster" class="secondary">${simpleStudentLogin ? "下載班級名冊 CSV" : "下載此班入場碼 CSV"}</button>`;
         document.querySelector("#download-roster").onclick = () =>
           download(
-            "student-entry-codes.csv",
+            simpleStudentLogin ? "class-roster.csv" : "student-entry-codes.csv",
             [
-              ["班級", "座號", "個別入場碼"],
-              ...roster.roster.map((s) => [roster.name, s.seat, s.entryCode]),
+              simpleStudentLogin
+                ? ["班級", "座號"]
+                : ["班級", "座號", "個別入場碼"],
+              ...roster.roster.map((s) =>
+                simpleStudentLogin
+                  ? [roster.name, s.seat]
+                  : [roster.name, s.seat, s.entryCode],
+              ),
             ]
               .map((r) => r.map(cell).join(","))
               .join("\r\n"),
           );
         selected = "";
         await refresh();
-        msg("班級已建立，請下載並個別發放入場碼。");
+        msg(
+          simpleStudentLogin
+            ? "班級已建立，學生輸入班級與座號即可登入。"
+            : "班級已建立，請下載並個別發放入場碼。",
+        );
       } catch (e) {
         msg(e.message);
       } finally {
@@ -138,23 +150,24 @@ async function start() {
         msg(e.message);
       }
     };
-    document.querySelector("#rotate-code").onsubmit = async (e) => {
-      e.preventDefault();
-      if (!confirm("確定重設此學生入場碼並登出其所有裝置？")) return;
-      try {
-        const id = document.querySelector("#rotate-class").value,
-          seat = Number(document.querySelector("#rotate-seat").value);
-        if (!id) return;
-        const r = await post(
-          `admin/classes/${encodeURIComponent(id)}/students/${seat}/code`,
-          {},
-        );
-        document.querySelector("#new-code").textContent =
-          `座號 ${seat} 新入場碼：${r.entryCode}（請個別轉交）`;
-      } catch (e) {
-        msg(e.message);
-      }
-    };
+    if (document.querySelector("#rotate-code"))
+      document.querySelector("#rotate-code").onsubmit = async (e) => {
+        e.preventDefault();
+        if (!confirm("確定重設此學生入場碼並登出其所有裝置？")) return;
+        try {
+          const id = document.querySelector("#rotate-class").value,
+            seat = Number(document.querySelector("#rotate-seat").value);
+          if (!id) return;
+          const r = await post(
+            `admin/classes/${encodeURIComponent(id)}/students/${seat}/code`,
+            {},
+          );
+          document.querySelector("#new-code").textContent =
+            `座號 ${seat} 新入場碼：${r.entryCode}（請個別轉交）`;
+        } catch (e) {
+          msg(e.message);
+        }
+      };
     await refresh();
   } catch (e) {
     await loginPage(e);
@@ -168,9 +181,10 @@ function paint() {
       report.classes
         .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
         .join("");
-    document.querySelector("#rotate-class").innerHTML = report.classes
-      .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
-      .join("");
+    if (document.querySelector("#rotate-class"))
+      document.querySelector("#rotate-class").innerHTML = report.classes
+        .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
+        .join("");
   }
   filter.value = selected;
   document.querySelector("#export-csv").href =
@@ -208,7 +222,7 @@ async function loginPage(error) {
   } catch (e) {
     unavailable = e.message;
   }
-  app.innerHTML = `<main class="teacher-shell"><section class="teacher-card"><div class="eyebrow">TEACHER LOGIN</div><h1>老師登入</h1><p>用老師 Email 和遊戲專用密碼登入（不是信箱密碼）；學生入場碼不能查看老師成績。不需要 Zero Trust 或付款方式。</p>${configured ? `<form id="teacher-login"><label>Email<input id="teacher-email" type="email" required autocomplete="username"></label><label>密碼<input id="teacher-password" type="password" required maxlength="128" autocomplete="current-password"></label><button class="primary">登入成績管理</button></form>` : `<p>${esc(unavailable || "尚未設定老師密碼。請先產生私密設定值，儲存到後端 Worker 的 Secret。")}</p><a class="primary" href="/teacher-password.html">私下設定老師密碼</a>`}<p id="teacher-login-status" role="status"></p><a class="secondary" href="/">返回學生遊戲</a>${configured ? '<p class="mode-note">忘記密碼？可私下產生新設定值並替換後端 Secret，舊登入會失效。</p><a href="/teacher-password.html">重新設定密碼</a>' : ""}</section></main>`;
+  app.innerHTML = `<main class="teacher-shell"><section class="teacher-card"><div class="eyebrow">TEACHER LOGIN</div><h1>老師登入</h1><p>用老師 Email 和遊戲專用密碼登入（不是信箱密碼）；學生登入不能查看老師管理頁。不需要 Zero Trust 或付款方式。</p>${configured ? `<form id="teacher-login"><label>Email<input id="teacher-email" type="email" required autocomplete="username"></label><label>密碼<input id="teacher-password" type="password" required maxlength="128" autocomplete="current-password"></label><button class="primary">登入成績管理</button></form>` : `<p>${esc(unavailable || "尚未設定老師密碼。請先產生私密設定值，儲存到後端 Worker 的 Secret。")}</p><a class="primary" href="/teacher-password.html">私下設定老師密碼</a>`}<p id="teacher-login-status" role="status"></p><a class="secondary" href="/">返回學生遊戲</a>${configured ? '<p class="mode-note">忘記密碼？可私下產生新設定值並替換後端 Secret，舊登入會失效。</p><a href="/teacher-password.html">重新設定密碼</a>' : ""}</section></main>`;
   if (configured)
     document.querySelector("#teacher-login").onsubmit = async (e) => {
       e.preventDefault();

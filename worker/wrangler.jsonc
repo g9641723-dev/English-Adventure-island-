@@ -18,5 +18,6 @@
   "vars": {
     "APP_ORIGINS": "https://english-adventure-island-3ip.pages.dev",
     "TEACHER_EMAILS": "g9641723@gmail.com",
+    "STUDENT_LOGIN_MODE": "class-seat",
   },
 }

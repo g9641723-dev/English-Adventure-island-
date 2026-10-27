@@ -113,6 +113,7 @@ export async function provision(config, { api, run, save, receipt = {} }) {
     vars: {
       APP_ORIGINS: receipt.studentUrl,
       TEACHER_EMAILS: config.email,
+      STUDENT_LOGIN_MODE: "class-seat",
     },
   };
   const pagesConfig = {
